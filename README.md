@@ -17,6 +17,8 @@ folder repozytorium (nie folder nad nim) albo wybierz interpreter ręcznie:
 
 ```
 GUI.py                    punkt startowy
+program2.py               dobór wydziałów (ranking słów + Bielik) – działa też samodzielnie z terminala
+wydzialy.md               wykaz wydziałów UM Bydgoszczy z BIP: zadania, rejestry
 asystent/
   konfiguracja.py         ścieżki, limity, terminy
   rejestr.py              kalendarz wniosków: terminy, statusy, kwerenda, historia (zapis w JSON)
@@ -28,6 +30,7 @@ asystent/
   ai/
     bielik_service.py     asynchroniczny klient LM Studio (analiza, dane osobowe, stream pisma)
     urzedus.py            czat Urzęduś: rozpoznawanie poleceń, regulacje zakresu, czynności
+    wydzialy.py           podłączenie program2.py do aplikacji (lista z BIP, dobór w tle)
     prompty.py            prompty modułów AI – do strojenia bez ruszania logiki
     prompty_czatu.py      prompty i ściąga z ustawy dla Urzędusia
   pliki/                  obsługa plików – bez zależności od GUI
@@ -54,11 +57,23 @@ Aplikacja korzysta z modelu **Bielik 4.5B v3.0 Instruct** uruchomionego w **LM S
 
 Co robi Bielik:
 - **Nowy wniosek** – po wgraniu pliku sam proponuje skrócony opis, wydziały i ocenę, czy potrzebna jest kwerenda.
-- **Sprawa → Wydziały** – propozycja wydziałów z uzasadnieniem (gdy wniosek dograno później).
+- **Sprawa → Wydziały** – propozycja wydziałów z uzasadnieniem; listę można poprawić ręcznie (wykaz z BIP).
 - **Sprawa → Projekt odpowiedzi** – pisze projekt pisma na żywo (stream) na podstawie wniosku, odpowiedzi
   wydziałów i opcjonalnego wzoru z archiwum.
 - **Sprawa → Anonimizacja** – wskazuje dane osób prywatnych (bez urzędników pełniących funkcje publiczne);
   dodatkowo PESEL, telefony, e-maile i numery kont wykrywane są wzorcami. Urzędnik zatwierdza, eksport je maskuje.
+
+### Dobór wydziałów (lista z BIP)
+
+Wykaz 19 wydziałów z zadaniami i rejestrami jest w `wydzialy.md`, algorytm w `program2.py`:
+1. **ranking słów** – słowa kluczowe wydziałów + podobieństwo wniosku do opisu zadań (działa bez modelu,
+   od razu po wgraniu pliku); pytania o koszty trafiają też do Wydziału Zarządzania Budżetem Miasta,
+2. **Bielik wybiera** spośród 6 najlepszych kandydatów i podaje uzasadnienie; lider rankingu z wyraźnymi
+   słowami kluczowymi nie zostanie pominięty,
+3. gdy LM Studio jest wyłączone – zostaje wynik rankingu.
+
+Z terminala (np. do strojenia słów kluczowych): `.venv\Scripts\python program2.py <plik lub folder> [--bez-llm]`
+(PDF w tym trybie wymaga `pip install pymupdf`; aplikacja czyta pliki sama i go nie potrzebuje).
 
 ### Kontrola jakości pisma (przeciw błędom i halucynacjom AI)
 

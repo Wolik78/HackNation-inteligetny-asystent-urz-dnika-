@@ -12,7 +12,7 @@ Urzęduś niczego nie zmienia ani nie wysyła sam – zmiany w sprawie GUI wykon
 """
 
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -23,9 +23,10 @@ from ..anonimizacja import wykryj_wzorce
 from ..kontrola import sprawdz_pismo
 from ..rejestr import Wniosek
 from . import prompty_czatu as prompty
-from .bielik_service import AnalizaWniosku, BielikService, BladAI, wyciagnij_json
+from .bielik_service import BielikService, BladAI, wyciagnij_json
 from .podrecznik import CALY_PODRECZNIK, znajdz_sekcje
 from .tekst import normalizuj as _normalizuj
+from .wydzialy import WynikDoboru, dobierz_async
 
 MAKS_DLUGOSC_WIADOMOSCI = 1000
 MAX_TOKENOW_ODPOWIEDZI = 500
@@ -147,7 +148,7 @@ class Wynik:
     intencja: Intencja
     tekst: str = ''                                  # gotowa odpowiedź (bez modelu)
     strumien: AsyncIterator[str] | None = None       # odpowiedź modelu na żywo
-    analiza: AnalizaWniosku | None = None            # propozycja wydziałów do zapisania w sprawie
+    wydzialy: WynikDoboru | None = None              # propozycja wydziałów do zapisania w sprawie
     dane_osobowe: list[str] = field(default_factory=list)
     zrodlo_danych_osobowych: str = ''                # 'projekt' albo 'wniosek'
     terminy: list[Wniosek] = field(default_factory=list)
@@ -314,8 +315,10 @@ async def pilnuj_zakresu(strumien: AsyncIterator[str]) -> AsyncIterator[str]:
 # --- Urzęduś -----------------------------------------------------------------------------
 
 class Urzedus:
-    def __init__(self, bielik: BielikService) -> None:
+    def __init__(self, bielik: BielikService,
+                 dobor_wydzialow: Callable[[str], Awaitable[WynikDoboru]] = dobierz_async) -> None:
         self.bielik = bielik
+        self.dobor_wydzialow = dobor_wydzialow  # moduł doboru wydziałów z BIP (asystent/ai/wydzialy.py)
 
     async def rozpoznaj(self, wiadomosc: str, ma_sprawe: bool) -> Intencja:
         if (intencja := rozpoznaj_lokalnie(wiadomosc)) is not None:
@@ -462,13 +465,13 @@ class Urzedus:
                                max_tokens=MAX_TOKENOW_PISMA)
 
     async def _wydzialy(self, sprawa: DaneSprawy) -> Wynik:
-        analiza = await self.bielik.analizuj_wniosek(sprawa.tekst_wniosku)
-        if not analiza.sugerowane_wydzialy:
-            return Wynik(Intencja.WYDZIALY, tekst='Nie udało się wskazać wydziałów – spróbuj ponownie.')
-        tekst = 'Proponuję skierować prośbę do:\n' + '\n'.join(f'• {w}' for w in analiza.sugerowane_wydzialy)
-        if analiza.uzasadnienie_wydzialu:
-            tekst += f'\n\n{analiza.uzasadnienie_wydzialu}'
-        return Wynik(Intencja.WYDZIALY, tekst=tekst, analiza=analiza)
+        wynik = await self.dobor_wydzialow(sprawa.tekst_wniosku)
+        if not wynik.propozycje:
+            return Wynik(Intencja.WYDZIALY, tekst='Nie udało się wskazać wydziałów. '
+                         + (wynik.komunikat or 'Wybierz je ręcznie w kroku „Wydziały”.'))
+        linie = [f'• {p.etykieta}' + (f' – {p.uzasadnienie}' if p.uzasadnienie else '') for p in wynik.propozycje]
+        tekst = 'Proponuję skierować prośbę do:\n' + '\n'.join(linie) + f'\n\n({wynik.opis_zrodla})'
+        return Wynik(Intencja.WYDZIALY, tekst=tekst, wydzialy=wynik)
 
     async def _dane_osobowe(self, sprawa: DaneSprawy) -> Wynik:
         zrodlo, tekst = ('projekt', sprawa.projekt) if sprawa.projekt.strip() else ('wniosek', sprawa.tekst_wniosku)

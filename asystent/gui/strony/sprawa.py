@@ -10,6 +10,7 @@ from nicegui import app, run, ui
 
 from ... import rejestr, stan_sprawy
 from ...ai import BladAI, usun_markdown
+from ...ai.wydzialy import dobierz, nazwy_wydzialow
 from ...anonimizacja import podziel_na_fragmenty, wykryj_wzorce, zamaskuj
 from ...kontrola import WynikKontroli, sprawdz_pismo
 from ...pliki import FORMATY, Kategoria, ZapisanyPlik, eksportuj, nazwa_pliku_odpowiedzi
@@ -130,38 +131,57 @@ def _krok_wydzialy(w: Wniosek) -> Odswiezacz:
         przycisk.props('loading')
         postep.set_visibility(True)
         try:
-            analiza = await bielik.analizuj_wniosek(tekst)
-        except BladAI as blad:
-            blad_ai(str(blad))
-            return
+            dobor = await run.io_bound(dobierz, tekst)
         finally:
-            przycisk.props(remove='loading')
-            postep.set_visibility(False)
-        w.sugerowane_wydzialy = analiza.sugerowane_wydzialy
-        w.uzasadnienie_wydzialu = analiza.uzasadnienie_wydzialu
+            if not przycisk.is_deleted:
+                przycisk.props(remove='loading')
+                postep.set_visibility(False)
+        if not dobor.propozycje:
+            if not przycisk.is_deleted:
+                ui.notify(dobor.komunikat or 'Nie dopasowano wydziału – wybierz go z listy.', type='warning')
+            return
+        w.sugerowane_wydzialy = dobor.etykiety
+        w.uzasadnienie_wydzialu = dobor.uzasadnienie
         rejestr.zapisz_zmiany()
+        if przycisk.is_deleted:  # urzędnik wyszedł ze sprawy – wynik i tak zapisany
+            return
+        if dobor.komunikat:  # np. LM Studio wyłączone – wynik z samych słów kluczowych
+            ui.notify(dobor.komunikat, type='warning')
         propozycje.refresh()
+
+    def zmien_wybor(zdarzenie) -> None:
+        w.sugerowane_wydzialy = list(zdarzenie.value or [])
+        rejestr.zapisz_zmiany()
+        uzasadnienia.refresh()  # samo pole wyboru zostaje – lista się nie zamyka
 
     async def kopiuj() -> None:
         await ui.clipboard.write(prosba.value)
         ui.notify('Skopiowano treść prośby do schowka.', type='positive')
 
     with ui.row().classes('w-full items-center justify-between'):
-        ui.label('Proponowane wydziały').classes('text-weight-medium')
+        ui.label('Wydziały, do których kierujesz prośbę').classes('text-weight-medium')
         przycisk = ui.button('Zaproponuj (Bielik)', icon='auto_awesome', on_click=zaproponuj).props('flat dense')
-    postep = wskaznik_postepu('Bielik analizuje wniosek… zwykle 30–60 s.')
+    postep = wskaznik_postepu('Bielik dobiera wydziały z listy BIP… zwykle 30–60 s.')
 
     @ui.refreshable
     def propozycje() -> None:
+        wszystkie = nazwy_wydzialow()
+        opcje = wszystkie + [n for n in w.sugerowane_wydzialy if n not in wszystkie]  # starsze wpisy spoza listy
+        ui.select(opcje, multiple=True, value=list(w.sugerowane_wydzialy), with_input=True, on_change=zmien_wybor,
+                  label='Wydziały (wykaz z BIP – możesz dodać i usunąć)').props('use-chips').classes('w-full')
+        uzasadnienia()
+
+    @ui.refreshable
+    def uzasadnienia() -> None:
         if not w.sugerowane_wydzialy:
-            ui.label('Brak propozycji – kliknij „Zaproponuj”, a Bielik przeanalizuje treść wniosku.') \
-                .classes('text-grey-7')
+            ui.label('Kliknij „Zaproponuj” albo wybierz wydziały z listy.').classes('text-grey-7')
             return
-        for nazwa in w.sugerowane_wydzialy:
-            ui.checkbox(nazwa, value=True)
-        if w.uzasadnienie_wydzialu:
-            ui.label(w.uzasadnienie_wydzialu).classes('text-caption text-grey-8')
-        ui.label('Podpowiedź AI – zweryfikuj z wykazem wydziałów UM w BIP.').classes('text-caption text-grey-6')
+        wybrane = ' '.join(w.sugerowane_wydzialy)
+        for linia in w.uzasadnienie_wydzialu.splitlines():  # „SKRÓT – dlaczego”; tylko dla wybranych wydziałów
+            skrot = linia.split(' – ', 1)[0]
+            if f'({skrot})' in wybrane or ' – ' not in linia:
+                ui.label(linia).classes('text-caption text-grey-8')
+        ui.label('Podpowiedź asystenta – sprawdź przed wysłaniem prośby.').classes('text-caption text-grey-6')
 
     propozycje()
     termin_wydzialu = max(w.termin - timedelta(days=3), date.today())
@@ -181,7 +201,9 @@ def _krok_odpowiedzi(w: Wniosek, po_zmianie_statusu: Callable[[], None]) -> Odsw
     ui.label('Odpowiedzi z wydziałów').classes('text-weight-medium')
     with ui.row().classes('w-full items-start no-wrap gap-6'):
         with ui.column().classes('w-[26rem] shrink-0'):
-            wydzial = ui.select(list(w.sugerowane_wydzialy), label='Od którego wydziału? (opcjonalnie)',
+            sugerowane = list(w.sugerowane_wydzialy)  # najpierw te, do których poszła prośba, potem reszta z BIP
+            wydzial = ui.select(sugerowane + [n for n in nazwy_wydzialow() if n not in sugerowane],
+                                label='Od którego wydziału? (opcjonalnie)',
                                 with_input=True, new_value_mode='add-unique', clearable=True).classes('w-full')
             strefa_wgrywania(lambda pliki: wgraj(pliki), tytul='Przeciągnij tutaj odpowiedzi wydziałów', wiele=True)
         lista = ui.column().classes('col')

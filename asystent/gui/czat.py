@@ -178,9 +178,9 @@ def _przyciski_akcji(wynik: Wynik, odpowiedz: str, kontekst: KontekstOkna, wnios
             ui.notify('Wstawiono do kroku „Projekt odpowiedzi”. Sprawdź treść przed eksportem.', type='positive')
 
     def zapisz_wydzialy() -> None:
-        if ta_sama_sprawa() and wynik.analiza:
-            wniosek.sugerowane_wydzialy = wynik.analiza.sugerowane_wydzialy
-            wniosek.uzasadnienie_wydzialu = wynik.analiza.uzasadnienie_wydzialu
+        if ta_sama_sprawa() and wynik.wydzialy:
+            wniosek.sugerowane_wydzialy = wynik.wydzialy.etykiety
+            wniosek.uzasadnienie_wydzialu = wynik.wydzialy.uzasadnienie
             rejestr.zapisz_zmiany()
             kontekst.odswiez_widok_sprawy()
             ui.notify('Zapisano wydziały w sprawie.', type='positive')
@@ -203,7 +203,7 @@ def _przyciski_akcji(wynik: Wynik, odpowiedz: str, kontekst: KontekstOkna, wnios
         match wynik.intencja:
             case Intencja.PROJEKT if odpowiedz:
                 ui.button('Wstaw do projektu', icon='input', on_click=wstaw_projekt).props(styl)
-            case Intencja.WYDZIALY if wynik.analiza:
+            case Intencja.WYDZIALY if wynik.wydzialy:
                 ui.button('Zapisz w sprawie', icon='save', on_click=zapisz_wydzialy).props(styl)
             case Intencja.DANE_OSOBOWE if wynik.dane_osobowe and wynik.zrodlo_danych_osobowych == 'projekt':
                 ui.button('Oznacz w anonimizacji', icon='visibility_off', on_click=oznacz_dane).props(styl)

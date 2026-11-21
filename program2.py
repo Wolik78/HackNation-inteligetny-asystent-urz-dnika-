@@ -32,12 +32,15 @@ import urllib.error
 import urllib.request
 from collections import Counter
 
-import pymupdf
 from docx import Document
 
+# pymupdf jest potrzebny tylko do czytania PDF w trybie terminalowym (aplikacja czyta pliki sama),
+# dlatego importujemy go dopiero w funkcjach, które go używają.
+
 KATALOG = os.path.dirname(os.path.abspath(__file__))
-LMSTUDIO_URL = "http://localhost:1235/v1/chat/completions"
-MODEL = "bielik-4.5b-v3.0-instruct"
+# te same zmienne co w aplikacji (asystent/konfiguracja.py), żeby oba programy łączyły się z tym samym Bielikiem
+LMSTUDIO_URL = os.environ.get("UDIP_LLM_URL", "http://localhost:1235/v1").rstrip("/") + "/chat/completions"
+MODEL = os.environ.get("UDIP_LLM_MODEL", "bielik-4.5b-v3.0-instruct")
 SCIEZKA_WYDZIALOW = os.path.join(KATALOG, "wydzialy.md")
 ROZSZERZENIA_ZDJEC = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp")
 ROZSZERZENIA = (".docx", ".pdf", ".txt") + ROZSZERZENIA_ZDJEC
@@ -79,7 +82,7 @@ SLOWA_KLUCZOWE = {
     "WK": ["faktur", "vat", "ksiegowos", "zwrot\\w* naleznosc", "nadplat"],
     "WMG": ["nieruchomos", "dzialk", "grunt", "geodez", "ewidencj\\w* grunt", "dzierzaw", "uzytkowani\\w* wieczyst",
             "nazw\\w* ulic", "numer\\w* porzadkow", "nadani\\w* numeru", "sprzedaz\\w* lokal", "mapa", "mapy"],
-    "WOS": ["srodowisk", "halas", "azbest", "zanieczyszcz", "emisj", "smog", "pieco\\w*", "studni",
+    "WOŚ": ["srodowisk", "halas", "azbest", "zanieczyszcz", "emisj", "smog", "pieco\\w*", "studni",
             "geolog", "ocen\\w* oddzialywania", "kopciuch"],
     "WOA": ["skarg", "petycj", "interpelacj", "zarzadzeni\\w* prezydenta", "archiw", "pelnomocnictw",
             "kancelari", "rekrutacj\\w* do urzedu", "zatrudnieni\\w* w urzedzie", "infolini"],
@@ -149,12 +152,18 @@ def rdzenie(tekst):
     return [rdzen(s) for s in slowa if s not in STOP]
 
 
+def czytelne_slowo(wzorzec):
+    """Wzorzec słowa kluczowego do pokazania człowiekowi: 'park(?:u|i)?\\b' -> 'park', 'dlug(?!o)' -> 'dlug'."""
+    s = re.sub(r"\(\?[:!=][^)]*\)\??", "", wzorzec)
+    return s.replace("\\w*", "").replace("\\b", "").replace("\\", "")
+
+
 def trafienia_slow_kluczowych(tekst):
     """{skrót wydziału: [trafione słowa kluczowe]}"""
     tekst = bez_ogonkow(tekst)
     wynik = {}
     for skrot, slowa in SLOWA_KLUCZOWE.items():
-        trafione = [s.replace("\\w*", "").replace("\\", "") for s in slowa
+        trafione = [czytelne_slowo(s) for s in slowa
                     if re.search(r"(?<![^\W\d_])" + bez_ogonkow(s), tekst)]
         if trafione:
             wynik[skrot] = trafione
@@ -176,6 +185,7 @@ def wczytaj_akapity(sciezka):
     if s.endswith(".docx"):
         return [p.text for p in Document(sciezka).paragraphs if p.text.strip()]
     if s.endswith(".pdf"):
+        import pymupdf
         with pymupdf.open(sciezka) as pdf:
             tekst = "\n".join(strona.get_text() for strona in pdf)
         return [l for l in tekst.splitlines() if l.strip()]
@@ -275,6 +285,7 @@ def wczytaj_tekst(sciezka):
         return ocr(sciezka)
 
     if s.endswith(".pdf"):
+        import pymupdf
         czesci = []
         with pymupdf.open(sciezka) as pdf:
             for nr, strona in enumerate(pdf, 1):
@@ -448,22 +459,23 @@ def wybierz_llm(tekst_wniosku, kandydaci):
 
 
 # --- 4. Program --------------------------------------------------------------
-def przydziel(plik, wydzialy, uzyj_llm=True):
-    tekst = wczytaj_tekst(plik)
-    if not tekst.strip():
-        print("Brak tekstu w pliku (skan bez warstwy tekstowej?)")
-        return
+def dobierz(tekst, wydzialy, uzyj_llm=True, wyniki=None):
+    """Wydziały, do których trzeba przesłać wniosek – bez drukowania (z tego korzysta aplikacja).
 
-    wyniki = ranking(tekst, wydzialy)
-    print("Ranking (punkty: 1 za każde słowo kluczowe + 0..1 za podobieństwo do opisu zadań):")
-    for punkty, w, top in wyniki[:LICZBA_KANDYDATOW]:
-        print(f"  {punkty:6.2f}  {w['skrot']:5} {w['nazwa']}  ({', '.join(top)})")
+    Zwraca (lista [(wydzial, uzasadnienie)], zrodlo, komunikat):
+    zrodlo = "bielik" albo "ranking"; komunikat wyjaśnia, czemu wynik jest z rankingu (albo "").
+    """
+    if wyniki is None:
+        wyniki = ranking(tekst, wydzialy)
+    if not wyniki:
+        return [], "ranking", "Brak listy wydziałów."
 
     # pytania o koszty / wydatki zawsze idą także do Wydziału Zarządzania Budżetem Miasta
     wzb = None
     if re.search(WZORZEC_KOSZTOW, bez_ogonkow(tekst)):
         wzb = next((w for w in wydzialy if w["skrot"] == "WZB"), None)
 
+    komunikat = ""
     if uzyj_llm:
         try:
             wybor = wybierz_llm(tekst, [w for _, w, _ in wyniki[:LICZBA_KANDYDATOW]])
@@ -477,24 +489,42 @@ def przydziel(plik, wydzialy, uzyj_llm=True):
             if wybor and wzb and wzb not in [w for w, _ in wybor]:
                 wybor.append((wzb, "pytanie o poniesione koszty / wydatki"))
             if wybor:
-                print("\nPRZEŚLIJ DO:")
-                for w, uzas in wybor:
-                    print(f"  -> {w['nazwa']} ({w['skrot']})" + (f": {uzas}" if uzas else ""))
-                return
-            print("\nBielik nie zwrócił poprawnej odpowiedzi - wynik z rankingu słów.")
+                return wybor, "bielik", ""
+            komunikat = "Bielik nie zwrócił poprawnej odpowiedzi - wynik z rankingu słów."
         except urllib.error.URLError as e:
-            print(f"\nBrak połączenia z LM Studio ({LMSTUDIO_URL}: {e}) - wynik z rankingu słów.")
+            komunikat = f"Brak połączenia z LM Studio ({LMSTUDIO_URL}: {e}) - wynik z rankingu słów."
+        except (OSError, ValueError, KeyError, IndexError, TypeError) as e:
+            komunikat = f"Błąd odpowiedzi Bielika ({e}) - wynik z rankingu słów."
 
     najlepszy = wyniki[0][0]
     if najlepszy <= 0:
-        print("\nNie udało się dopasować wniosku do żadnego wydziału.")
-        return
-    print("\nPRZEŚLIJ DO (ranking słów):")
-    wybrane = [(w, top) for punkty, w, top in wyniki if punkty >= PROG_BEZ_LLM * najlepszy]
-    for w, top in wybrane:
-        print(f"  -> {w['nazwa']} ({w['skrot']})  [pasujące: {', '.join(top)}]")
+        return [], "ranking", "Nie udało się dopasować wniosku do żadnego wydziału."
+    wybrane = [(w, "pasujące: " + ", ".join(top)) for punkty, w, top in wyniki
+               if punkty >= PROG_BEZ_LLM * najlepszy]
     if wzb and wzb not in [w for w, _ in wybrane]:
-        print(f"  -> {wzb['nazwa']} ({wzb['skrot']})  [pytanie o poniesione koszty / wydatki]")
+        wybrane.append((wzb, "pytanie o poniesione koszty / wydatki"))
+    return wybrane, "ranking", komunikat
+
+
+def przydziel(plik, wydzialy, uzyj_llm=True):
+    tekst = wczytaj_tekst(plik)
+    if not tekst.strip():
+        print("Brak tekstu w pliku (skan bez warstwy tekstowej?)")
+        return
+
+    wyniki = ranking(tekst, wydzialy)
+    print("Ranking (punkty: 1 za każde słowo kluczowe + 0..1 za podobieństwo do opisu zadań):")
+    for punkty, w, top in wyniki[:LICZBA_KANDYDATOW]:
+        print(f"  {punkty:6.2f}  {w['skrot']:5} {w['nazwa']}  ({', '.join(top)})")
+
+    wybrane, zrodlo, komunikat = dobierz(tekst, wydzialy, uzyj_llm, wyniki=wyniki)
+    if komunikat:
+        print("\n" + komunikat)
+    if not wybrane:
+        return
+    print("\nPRZEŚLIJ DO:" if zrodlo == "bielik" else "\nPRZEŚLIJ DO (ranking słów):")
+    for w, uzas in wybrane:
+        print(f"  -> {w['nazwa']} ({w['skrot']})" + (f": {uzas}" if uzas else ""))
 
 
 def main():

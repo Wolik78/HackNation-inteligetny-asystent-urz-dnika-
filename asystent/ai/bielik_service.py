@@ -10,7 +10,7 @@ import json
 import logging
 import re
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 ZNAKOW_NA_TOKEN = 3.0          # zmierzone dla Bieliku: ~3,3 znaku polskiego tekstu na token (z zapasem)
 REZERWA_NA_PROMPT = 400        # tokeny na instrukcje systemowe i formatowanie
-MAX_TOKENOW_ANALIZY = 400
+MAX_TOKENOW_ANALIZY = 200
 MAX_TOKENOW_DANYCH_OSOBOWYCH = 400
 MAX_TOKENOW_PISMA = 700
 MAX_TOKENOW_KOMPLETNOSCI = 500
@@ -34,9 +34,8 @@ class BladAI(Exception):
 
 @dataclass
 class AnalizaWniosku:
+    """Wynik analizy wniosku. Wydziały dobiera osobny moduł – `asystent.ai.wydzialy`."""
     skrocony_opis: str
-    sugerowane_wydzialy: list[str] = field(default_factory=list)
-    uzasadnienie_wydzialu: str = ''
     czy_wymaga_kwerendy: bool = False
 
 
@@ -82,19 +81,13 @@ class BielikService:
         opis = f'Bielik gotowy (okno kontekstu: {kontekst} tokenów)' if kontekst else 'Bielik gotowy'
         return StatusModelu(True, opis, kontekst)
 
-    async def analizuj_wniosek(self, tekst: str, znane_wydzialy: list[str] | None = None) -> AnalizaWniosku:
-        """Skrócony opis, sugerowane wydziały i ocena, czy potrzebna jest kwerenda."""
+    async def analizuj_wniosek(self, tekst: str) -> AnalizaWniosku:
+        """Skrócony opis i ocena, czy potrzebna jest kwerenda."""
         limit = await self._limit_znakow(MAX_TOKENOW_ANALIZY)
-        odpowiedz = await self._czat(prompty.analiza_wniosku(tekst[:limit], znane_wydzialy),
-                                     max_tokens=MAX_TOKENOW_ANALIZY)
+        odpowiedz = await self._czat(prompty.analiza_wniosku(tekst[:limit]), max_tokens=MAX_TOKENOW_ANALIZY)
         dane = wyciagnij_json(odpowiedz)
-        wydzialy = dane.get('sugerowane_wydzialy') or []
-        if isinstance(wydzialy, str):
-            wydzialy = [wydzialy]
         return AnalizaWniosku(
             skrocony_opis=str(dane.get('skrocony_opis') or '').strip(),
-            sugerowane_wydzialy=[str(w).strip() for w in wydzialy if str(w).strip()][:5],
-            uzasadnienie_wydzialu=str(dane.get('uzasadnienie_wydzialu') or '').strip(),
             czy_wymaga_kwerendy=_na_bool(dane.get('czy_wymaga_kwerendy')),
         )
 

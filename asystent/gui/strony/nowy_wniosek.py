@@ -5,7 +5,8 @@ from datetime import date
 from nicegui import run, ui
 
 from ... import rejestr
-from ...ai import AnalizaWniosku, BladAI
+from ...ai import AnalizaWniosku, BladAI, WynikDoboru
+from ...ai.wydzialy import dobierz
 from ...pliki import Kategoria, ZapisanyPlik
 from ...uslugi import bielik, magazyn
 from ..komponenty import (WgranePliki, blad_ai, karta_pliku, naglowek_strony, strefa_wgrywania, wskaznik_postepu,
@@ -15,7 +16,7 @@ WYMAGANE = {'Pole wymagane': lambda v: bool(v and str(v).strip())}
 
 
 def strona_nowy_wniosek() -> None:
-    stan: dict = {'plik': None, 'analiza': None}
+    stan: dict = {'plik': None, 'analiza': None, 'wydzialy': None}
 
     async def wgraj(pliki: WgranePliki) -> None:
         zapisane = await zapisz_wgrane(pliki[:1], lambda n, d: magazyn.zapisz(d, n, Kategoria.WNIOSEK))
@@ -27,7 +28,7 @@ def strona_nowy_wniosek() -> None:
     async def usun_plik(plik: ZapisanyPlik) -> None:
         await run.io_bound(magazyn.usun, plik)
         stan['plik'] = None
-        stan['analiza'] = None
+        stan['analiza'] = stan['wydzialy'] = None
         podglad.refresh()
         podpowiedz.refresh()
 
@@ -40,23 +41,42 @@ def strona_nowy_wniosek() -> None:
         if not tekst.strip():
             ui.notify('W pliku nie ma tekstu do analizy (to może być skan).', type='warning')
             return
+        aktualne = lambda: stan['plik'] is plik and not przycisk_ai.is_deleted  # noqa: E731 – plik nie zmieniony
+
+        # 1. wydziały od razu ze słów kluczowych (lista z BIP, bez modelu – ułamek sekundy)
+        stan['wydzialy'] = await run.io_bound(dobierz, tekst, uzyj_llm=False)
+        podpowiedz.refresh()
 
         przycisk_ai.props('loading')
+        postep.opis.set_text('Bielik analizuje wniosek… zwykle 30–60 s, możesz w tym czasie wypełniać pola.')
         postep.set_visibility(True)
         try:
-            analiza = await bielik.analizuj_wniosek(tekst)
-        except BladAI as blad:
-            blad_ai(f'Analiza AI niedostępna – uzupełnij pola ręcznie. {blad}' if automatycznie else str(blad))
-            return
-        finally:
-            przycisk_ai.props(remove='loading')
-            postep.set_visibility(False)
+            # 2. skrócony opis i kwerenda
+            try:
+                analiza = await bielik.analizuj_wniosek(tekst)
+            except BladAI as blad:
+                if aktualne():
+                    blad_ai(f'Analiza AI niedostępna – uzupełnij pola ręcznie. {blad}' if automatycznie else str(blad))
+                return
+            if not aktualne():
+                return
+            stan['analiza'] = analiza
+            if analiza.skrocony_opis and (not automatycznie or not temat.value.strip()):
+                temat.value = analiza.skrocony_opis
+            kwerenda.value = analiza.czy_wymaga_kwerendy
+            podpowiedz.refresh()
 
-        stan['analiza'] = analiza
-        if analiza.skrocony_opis and (not automatycznie or not temat.value.strip()):
-            temat.value = analiza.skrocony_opis
-        kwerenda.value = analiza.czy_wymaga_kwerendy
-        podpowiedz.refresh()
+            # 3. Bielik wybiera wydziały spośród najlepszych kandydatów z rankingu
+            postep.opis.set_text('Bielik dobiera wydziały z listy BIP…')
+            dobor = await run.io_bound(dobierz, tekst)
+            if not aktualne():
+                return
+            stan['wydzialy'] = dobor
+            podpowiedz.refresh()
+        finally:
+            if not przycisk_ai.is_deleted:
+                przycisk_ai.props(remove='loading')
+                postep.set_visibility(False)
         ui.notify('Bielik uzupełnił pola – sprawdź je przed zatwierdzeniem.', type='positive')
 
     naglowek_strony('Nowy wniosek', 'Wgraj plik – Bielik przeanalizuje wniosek. Sprawdź dane i zatwierdź.')
@@ -98,19 +118,16 @@ def strona_nowy_wniosek() -> None:
             @ui.refreshable
             def podpowiedz() -> None:
                 analiza: AnalizaWniosku | None = stan['analiza']
-                if analiza is None:
+                dobor: WynikDoboru | None = stan['wydzialy']
+                if analiza is None and dobor is None:
                     return
                 with ui.card().props('flat').classes('w-full bg-blue-1'):
                     with ui.row().classes('items-center gap-2'):
                         ui.icon('auto_awesome', color='primary')
-                        ui.label('Podpowiedź Bielika – do weryfikacji').classes('text-weight-medium')
-                    if analiza.sugerowane_wydzialy:
-                        with ui.row().classes('gap-1'):
-                            for wydzial in analiza.sugerowane_wydzialy:
-                                ui.chip(wydzial, icon='account_tree').props('dense outline color=primary')
-                    if analiza.uzasadnienie_wydzialu:
-                        ui.label(analiza.uzasadnienie_wydzialu).classes('text-caption text-grey-8')
-                    if analiza.czy_wymaga_kwerendy:
+                        ui.label('Podpowiedź asystenta – do weryfikacji').classes('text-weight-medium')
+                    if dobor is not None:
+                        _propozycje_wydzialow(dobor)
+                    if analiza and analiza.czy_wymaga_kwerendy:
                         ui.label('Bielik sugeruje kwerendę – zaznaczono pole powyżej.').classes('text-caption text-grey-8')
 
             podpowiedz()
@@ -146,13 +163,13 @@ def strona_nowy_wniosek() -> None:
         except (TypeError, ValueError):
             ui.notify('Podaj poprawną datę wpływu (RRRR-MM-DD).', type='warning')
             return
-        analiza: AnalizaWniosku | None = stan['analiza']
+        dobor: WynikDoboru | None = stan['wydzialy']
         try:
             wniosek = rejestr.dodaj(
                 nr=nr.value.strip(), temat=temat.value.strip(), wnioskodawca=wnioskodawca.value.strip(),
                 data_wplywu=wplyw, kto=kto.value.strip(), kwerenda=kwerenda.value, kontakt=kontakt.value.strip(),
-                sugerowane_wydzialy=analiza.sugerowane_wydzialy if analiza else None,
-                uzasadnienie_wydzialu=analiza.uzasadnienie_wydzialu if analiza else '',
+                sugerowane_wydzialy=dobor.etykiety if dobor else None,
+                uzasadnienie_wydzialu=dobor.uzasadnienie if dobor else '',
             )
         except ValueError as blad:
             ui.notify(str(blad), type='negative')
@@ -161,3 +178,19 @@ def strona_nowy_wniosek() -> None:
             await run.io_bound(magazyn.przenies_do_sprawy, stan['plik'], wniosek.nr)
         ui.notify(f'Dodano wniosek {wniosek.nr}.', type='positive')
         ui.navigate.to(f'/sprawa/{wniosek.id}')
+
+
+def _propozycje_wydzialow(dobor: WynikDoboru) -> None:
+    """Lista proponowanych wydziałów: skrót, nazwa i dlaczego."""
+    if not dobor.propozycje:
+        ui.label(dobor.komunikat or 'Nie dopasowano wydziału – wybierzesz go w sprawie, w kroku „Wydziały”.') \
+            .classes('text-caption text-grey-8')
+        return
+    ui.label(f'Wydziały – {dobor.opis_zrodla}:').classes('text-caption text-grey-7')
+    for p in dobor.propozycje:
+        with ui.row().classes('items-start gap-2 no-wrap'):
+            ui.chip(p.skrot, icon='account_tree').props('dense outline color=primary').classes('shrink-0')
+            with ui.column().classes('gap-0'):
+                ui.label(p.nazwa).classes('text-body2')
+                if p.uzasadnienie:
+                    ui.label(p.uzasadnienie).classes('text-caption text-grey-8')

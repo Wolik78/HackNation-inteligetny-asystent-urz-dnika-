@@ -18,7 +18,7 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 - [x] Kontrola jakości pisma: liczby ze źródłami, pominięte dane, kompletność (Z7 – „wykluczyć halucynacje”)
 - [x] Czat Urzęduś z regulacjami zakresu
 - [x] Baza wiedzy: ustawy, zarządzenia, archiwalne odpowiedzi (I1, J6)
-- [x] 154 testy automatyczne, dane testowe w `dane_testowe/`
+- [x] 194 testy automatyczne, dane testowe w `dane_testowe/`
 
 ---
 
@@ -41,7 +41,8 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
   - [ ] wykrywanie imion i nazwisk bez AI (słownik polskich imion + wzorce), adresów, kodów pocztowych, dat urodzenia, NIP/REGON osób fizycznych
   - [ ] przetestować na kilku plikach z danymi (także gdy LM Studio jest wyłączone)
 - [ ] **Materiały od mentorów (kod QR w dniu startu)** – wgrać wzory wniosków i odpowiedzi, zastąpić nimi dane testowe, sprawdzić całą ścieżkę na nich
-- [ ] **Lista wydziałów i biur z BIP + dobór wydziału** (Z6, I4) – 👤 **robi kolega**; uzgodnić miejsca styku (`analizuj_wniosek(znane_wydzialy=…)`, krok „Wydziały”, czat)
+- [x] **Lista wydziałów z BIP + dobór wydziału** (Z6, I4) – moduł kolegi (`program2.py`, `wydzialy.md`) podłączony: nowy wniosek, krok „Wydziały” (wybór z listy BIP), odpowiedzi wydziałów, czat
+  - [ ] 👤 kolega: uzupełnić listę o biura (np. komórka od promocji – testowy wniosek o promocję nie ma dziś dobrego dopasowania)
 
 ## 2. Kalendarz wniosków
 

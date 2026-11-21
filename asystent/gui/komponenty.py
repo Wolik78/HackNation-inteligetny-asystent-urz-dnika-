@@ -54,10 +54,10 @@ def blad_ai(tresc: str) -> None:
 
 
 def wskaznik_postepu(tekst: str) -> ui.row:
-    """Ukryty wiersz „spinner + opis” do pokazywania w trakcie pracy modelu."""
+    """Ukryty wiersz „spinner + opis” do pokazywania w trakcie pracy modelu (opis zmienisz przez `.opis.set_text`)."""
     with ui.row().classes('items-center gap-2 text-primary') as wiersz:
         ui.spinner(size='sm')
-        ui.label(tekst).classes('text-caption')
+        wiersz.opis = ui.label(tekst).classes('text-caption')
     wiersz.set_visibility(False)
     return wiersz
 

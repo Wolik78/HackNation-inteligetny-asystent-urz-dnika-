@@ -39,15 +39,15 @@ SEKCJE = (
     Sekcja('Nowy wniosek', ('nowy wniosek', 'nowego wniosku', 'dodac wniosek', 'dodaj wniosek', 'wgrac wniosek',
                             'wgrac plik', 'zarejestr', 'przeciagn'), (
         'Nowy wniosek: przeciągnij plik PDF albo Word na pole po lewej (albo kliknij je i wybierz plik). '
-        'Aplikacja odczyta tekst, a Bielik sam zaproponuje skrócony opis, wydziały i oceni, czy potrzebna jest '
-        'kwerenda. Uzupełnij wnioskodawcę, sprawdź dane i kliknij „Zatwierdź i dodaj do listy” – wniosek trafi '
+        'Aplikacja odczyta tekst i od razu dopasuje wydziały z wykazu BIP, a Bielik zaproponuje skrócony opis, '
+        'doprecyzuje wydziały i oceni, czy potrzebna jest kwerenda. Uzupełnij wnioskodawcę, sprawdź dane i kliknij „Zatwierdź i dodaj do listy” – wniosek trafi '
         'do kalendarza, a plik do dokumentów sprawy.'
     )),
     Sekcja('Sprawa', ('sprawa', 'sprawy', 'krok', 'etap', 'stepper', 'wydzial', 'odpowiedzi wydzial',
                       'podobne sprawy'), (
         'Otwarta sprawa ma 7 kroków: 1. Wniosek – dane i treść wniosku; 2. Podobne sprawy z archiwum; '
-        '3. Wydziały – propozycja Bielika i gotowa prośba do skopiowania; 4. Odpowiedzi wydziałów – tu wgrywasz '
-        'pliki od wydziałów; 5. Projekt odpowiedzi; 6. Anonimizacja; 7. Eksport. Między krokami przechodzisz '
+        '3. Wydziały – propozycja z wykazu wydziałów w BIP (możesz ją poprawić) i gotowa prośba do skopiowania; '
+        '4. Odpowiedzi wydziałów – tu wgrywasz pliki od wydziałów; 5. Projekt odpowiedzi; 6. Anonimizacja; 7. Eksport. Między krokami przechodzisz '
         'przyciskami „Dalej”/„Wstecz” albo klikając nazwę kroku. Praca w sprawie (projekt pisma, anonimizacja, '
         'kontrola jakości) zapisuje się automatycznie – po powrocie albo ponownym uruchomieniu aplikacji wszystko '
         'na Ciebie czeka.'

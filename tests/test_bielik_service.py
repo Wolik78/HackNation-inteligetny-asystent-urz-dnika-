@@ -38,22 +38,19 @@ def uruchom(korutyna):
 # --- analiza wniosku ---
 
 def test_analiza_wniosku_parsuje_json_w_bloku_kodu():
-    tresc = '```json\n{"skrocony_opis": "Wydatki na promocję", "sugerowane_wydzialy": ["Wydział Promocji"],' \
-            ' "uzasadnienie_wydzialu": "Odpowiada za promocję.", "czy_wymaga_kwerendy": false}\n```'
+    tresc = '```json\n{"skrocony_opis": "Wydatki na promocję", "czy_wymaga_kwerendy": false}\n```'
     wynik = uruchom(serwis(lambda r, p: odpowiedz_czatu(tresc)).analizuj_wniosek('wniosek'))
 
     assert wynik.skrocony_opis == 'Wydatki na promocję'
-    assert wynik.sugerowane_wydzialy == ['Wydział Promocji']
     assert wynik.czy_wymaga_kwerendy is False
 
 
 def test_analiza_toleruje_typy_od_malego_modelu():
-    tresc = '{"skrocony_opis": "X", "sugerowane_wydzialy": "Wydział Finansów", "czy_wymaga_kwerendy": "tak"}'
+    tresc = '{"skrocony_opis": 12, "czy_wymaga_kwerendy": "tak"}'
     wynik = uruchom(serwis(lambda r, p: odpowiedz_czatu(tresc)).analizuj_wniosek('wniosek'))
 
-    assert wynik.sugerowane_wydzialy == ['Wydział Finansów']
+    assert wynik.skrocony_opis == '12'
     assert wynik.czy_wymaga_kwerendy is True
-    assert wynik.uzasadnienie_wydzialu == ''
 
 
 def test_wysylany_jest_model_temperatura_i_przyciety_tekst():
@@ -79,7 +76,9 @@ def test_limit_znakow_dopasowuje_sie_do_malego_okna_kontekstu():
         return odpowiedz_czatu('{"skrocony_opis": "X"}')
 
     uruchom(serwis(obsluga, kontekst=2048).analizuj_wniosek('a' * 20_000))
-    assert wyslane['messages'][1]['content'].count('a') < 4000
+    from asystent.ai import bielik_service as bs
+    miesci_sie = int((2048 - bs.MAX_TOKENOW_ANALIZY - bs.REZERWA_NA_PROMPT) * bs.ZNAKOW_NA_TOKEN)
+    assert wyslane['messages'][1]['content'].count('a') == miesci_sie < 6000  # 6000 = limit przy dużym oknie
 
 
 def test_niepoprawny_json_daje_czytelny_blad():

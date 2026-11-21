@@ -12,20 +12,16 @@ def _cytat(tekst: str) -> str:
     return f'"""\n{tekst.strip()}\n"""'
 
 
-def analiza_wniosku(tekst: str, znane_wydzialy: list[str] | None = None) -> list[dict]:
+def analiza_wniosku(tekst: str) -> list[dict]:
+    # Wydziałów tu nie ma – dobiera je asystent/ai/wydzialy.py (lista z BIP). Krótszy prompt = szybsza odpowiedź.
     system = (
         f'{SYSTEM_URZEDNIK} Analizujesz wniosek. {FORMAT_TYLKO_JSON} Format:\n'
-        '{"skrocony_opis": "...", "sugerowane_wydzialy": ["..."], "uzasadnienie_wydzialu": "...", '
-        '"czy_wymaga_kwerendy": false}\n'
+        '{"skrocony_opis": "...", "czy_wymaga_kwerendy": false}\n'
         'Zasady:\n'
         '- skrocony_opis: jedno zdanie (do 15 słów), czego dotyczy wniosek, bez danych osobowych wnioskodawcy;\n'
-        '- sugerowane_wydzialy: 1–3 komórki Urzędu Miasta Bydgoszczy, które mają potrzebne informacje;\n'
-        '- uzasadnienie_wydzialu: 1–2 zdania, dlaczego te komórki;\n'
         '- czy_wymaga_kwerendy: true tylko wtedy, gdy przygotowanie informacji wymaga przeszukania dużej liczby '
         'dokumentów lub danych z wielu lat (przedłużenie terminu do 2 miesięcy, art. 13 ust. 2).'
     )
-    if znane_wydzialy:
-        system += '\nWybieraj wyłącznie spośród komórek: ' + '; '.join(znane_wydzialy) + '.'
     return [
         {'role': 'system', 'content': system},
         {'role': 'user', 'content': f'Treść wniosku:\n{_cytat(tekst)}'},
