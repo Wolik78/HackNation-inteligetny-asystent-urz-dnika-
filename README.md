@@ -22,6 +22,8 @@ asystent/
   rejestr.py              lista wniosków (10 testowych + dodane przez urzędnika)
   uslugi.py               wspólne instancje (magazyn plików, klient Bielika)
   anonimizacja.py         wzorce danych osobowych, podział tekstu, maskowanie
+  kontrola.py             kontrola jakości pisma bez AI (liczby, daty, forma)
+  stan_sprawy.py          autozapis pracy w sprawie (stan.json w katalogu sprawy)
   ai/
     bielik_service.py     asynchroniczny klient LM Studio (analiza, dane osobowe, stream pisma)
     urzedus.py            czat Urzęduś: rozpoznawanie poleceń, regulacje zakresu, czynności
@@ -105,6 +107,7 @@ Ustawienia przez zmienne środowiskowe: `UDIP_LLM_URL` (domyślnie `http://local
 dane/
   przychodzace/                   wgrane, niezatwierdzone wnioski
   sprawy/<nr>/wniosek|odpowiedzi|eksport/
+  sprawy/<nr>/stan.json           projekt pisma, anonimizacja, wynik kontroli (autozapis)
   baza_wiedzy/ustawy|zarzadzenia|archiwum/
   rejestr_wnioskow.json
 ```

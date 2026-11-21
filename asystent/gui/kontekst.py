@@ -20,16 +20,30 @@ class KontekstOkna:
     stan_sprawy: dict | None = None  # stan widoku sprawy: projekt, wykryte i ukryte dane osobowe…
     _odswiez_sprawe: list[Callable[[], None]] = field(default_factory=list)
     _po_zmianie: list[Callable[[], None]] = field(default_factory=list)
+    _przy_zamknieciu: Callable[[], None] | None = None  # np. natychmiastowy zapis stanu sprawy
 
-    def otworz_sprawe(self, wniosek: Wniosek, stan: dict, odswiezacze: list[Callable[[], None]]) -> None:
+    def otworz_sprawe(self, wniosek: Wniosek, stan: dict, odswiezacze: list[Callable[[], None]],
+                      przy_zamknieciu: Callable[[], None] | None = None) -> None:
+        self.zakoncz_prace()  # poprzednia sprawa (jeśli była) zapisuje się, zanim ją podmienimy
         self.wniosek, self.stan_sprawy, self._odswiez_sprawe = wniosek, stan, list(odswiezacze)
+        self._przy_zamknieciu = przy_zamknieciu
         self._powiadom()
 
     def zamknij_sprawe(self) -> None:
         if self.wniosek is None:
             return
-        self.wniosek, self.stan_sprawy, self._odswiez_sprawe = None, None, []
+        self.zakoncz_prace()
+        self.wniosek, self.stan_sprawy, self._odswiez_sprawe, self._przy_zamknieciu = None, None, [], None
         self._powiadom()
+
+    def zakoncz_prace(self) -> None:
+        """Wywołuje zapis otwartej sprawy (przy wyjściu ze sprawy, przejściu do innej i zamknięciu okna)."""
+        if self._przy_zamknieciu is None:
+            return
+        try:
+            self._przy_zamknieciu()
+        except Exception:
+            log.exception('Nie udało się zapisać sprawy przy zamykaniu')
 
     def po_zmianie_sprawy(self, funkcja: Callable[[], None]) -> None:
         self._po_zmianie.append(funkcja)
@@ -53,6 +67,7 @@ _konteksty: dict[str, KontekstOkna] = {}
 def biezacy() -> KontekstOkna:
     klient = ui.context.client
     if klient.id not in _konteksty:
-        _konteksty[klient.id] = KontekstOkna()
+        kontekst = _konteksty[klient.id] = KontekstOkna()
+        klient.on_disconnect(kontekst.zakoncz_prace)  # zamknięcie okna – zapisz, co niezapisane
         klient.on_delete(lambda: _konteksty.pop(klient.id, None))
     return _konteksty[klient.id]

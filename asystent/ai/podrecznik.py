@@ -37,7 +37,9 @@ SEKCJE = (
         'Otwarta sprawa ma 7 kroków: 1. Wniosek – dane i treść wniosku; 2. Podobne sprawy z archiwum; '
         '3. Wydziały – propozycja Bielika i gotowa prośba do skopiowania; 4. Odpowiedzi wydziałów – tu wgrywasz '
         'pliki od wydziałów; 5. Projekt odpowiedzi; 6. Anonimizacja; 7. Eksport. Między krokami przechodzisz '
-        'przyciskami „Dalej”/„Wstecz” albo klikając nazwę kroku.'
+        'przyciskami „Dalej”/„Wstecz” albo klikając nazwę kroku. Praca w sprawie (projekt pisma, anonimizacja, '
+        'kontrola jakości) zapisuje się automatycznie – po powrocie albo ponownym uruchomieniu aplikacji wszystko '
+        'na Ciebie czeka.'
     )),
     Sekcja('Projekt odpowiedzi', ('projekt', 'generuj', 'pismo', 'zatrzymaj', 'uzupelnic'), (
         'Projekt odpowiedzi (krok 5): kliknij „Generuj projekt (Bielik)” – pismo powstaje na żywo na podstawie '

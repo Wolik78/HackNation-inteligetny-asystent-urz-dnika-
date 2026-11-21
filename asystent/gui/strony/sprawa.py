@@ -3,12 +3,12 @@
 import shutil
 from collections.abc import Callable
 from contextlib import aclosing
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from nicegui import app, run, ui
 
-from ... import rejestr
+from ... import rejestr, stan_sprawy
 from ...ai import BladAI, usun_markdown
 from ...anonimizacja import podziel_na_fragmenty, wykryj_wzorce, zamaskuj
 from ...kontrola import WynikKontroli, sprawdz_pismo
@@ -302,6 +302,8 @@ class PanelKontroli:
         self.odswiez()
 
     def odswiez(self) -> None:
+        if self.wyniki.is_deleted:  # urzędnik wyszedł ze sprawy, zanim Bielik skończył
+            return
         self.wyniki.clear()
         with self.wyniki:
             self._rysuj()
@@ -573,12 +575,40 @@ def strona_sprawa(id: str) -> None:
         return
     szablon = PROJEKT_ODPOWIEDZI.format(wplyw=f'{w.data_wplywu:%d.%m.%Y}')
     stan = {'projekt': szablon, 'szablon': szablon, 'wykryte': {}, 'ukryte': set(), 'generowanie': False}
+    katalog = magazyn.katalog_sprawy(w.nr)
+    zapisany = stan_sprawy.wczytaj(katalog)
+    zapisano = zapisany.pop('zapisano', None)
+    stan.update(zapisany)
 
     with ui.row().classes('w-full items-center justify-between'):
         with ui.row().classes('items-center'):
             ui.button(icon='arrow_back', on_click=lambda: ui.navigate.to('/')).props('flat round')
             naglowek_strony(f'{w.nr} – {w.temat}', f'Termin: {w.termin:%d.%m.%Y} ({w.pozostalo})')
-        ui.badge(w.status_opis, color=KOLOR_STATUSU[w.status]).classes('text-body2 q-pa-sm')
+        with ui.row().classes('items-center gap-3'):
+            with ui.row().classes('items-center gap-1 text-caption text-grey-7'):
+                ui.icon('cloud_done' if zapisano else 'save', size='xs')
+                info_zapisu = ui.label(f'Wczytano zapisaną pracę z {zapisano:%d.%m %H:%M}' if zapisano
+                                       else 'Zmiany zapisują się automatycznie')
+            ui.badge(w.status_opis, color=KOLOR_STATUSU[w.status]).classes('text-body2 q-pa-sm')
+
+    # Autozapis: co 2 s porównujemy stan z ostatnio zapisanym – zapisujemy tylko, gdy coś się zmieniło.
+    ostatni_zapis = {'json': stan_sprawy.serializuj(stan)}
+
+    def autozapis() -> None:
+        aktualny = stan_sprawy.serializuj(stan)
+        if aktualny == ostatni_zapis['json']:
+            return
+        try:
+            stan_sprawy.zapisz(katalog, stan)
+        except OSError as blad:
+            if not info_zapisu.is_deleted:
+                info_zapisu.set_text(f'Nie udało się zapisać: {blad.strerror}')
+            return
+        ostatni_zapis['json'] = aktualny
+        if not info_zapisu.is_deleted:  # przy wyjściu ze sprawy widok już nie istnieje
+            info_zapisu.set_text(f'Zapisano {datetime.now():%H:%M:%S}')
+
+    ui.timer(2.0, autozapis)
 
     kroki = [
         ('Wniosek', 'description', lambda: _krok_wniosek(w)),
@@ -603,4 +633,8 @@ def strona_sprawa(id: str) -> None:
     # Kroki zależne od treści projektu odświeżamy przy wejściu (projekt mógł się zmienić).
     stepper.on_value_change(lambda e: odswiezacze[e.value]() if e.value in odswiezacze else None)
     # Urzęduś pracuje na tej sprawie i po zatwierdzeniu zmian z czatu odświeża te kroki.
-    biezacy().otworz_sprawe(w, stan, list(odswiezacze.values()))
+    def przy_zamknieciu() -> None:
+        stan['generowanie'] = False  # przerywa pisanie pisma przez Bielika – nikt go już nie zobaczy
+        autozapis()
+
+    biezacy().otworz_sprawe(w, stan, list(odswiezacze.values()), przy_zamknieciu=przy_zamknieciu)

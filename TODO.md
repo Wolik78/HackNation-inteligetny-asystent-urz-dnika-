@@ -30,8 +30,8 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
   - [ ] także podobne wnioski z bieżącego rejestru z ostatniego roku (I3)
   - [ ] najlepsze dopasowanie automatycznie jako wzór do projektu odpowiedzi
   - [ ] usunąć dane przykładowe z `archiwum.py` i `sprawa.py`
-- [ ] **Zapisywanie stanu sprawy** – dziś projekt pisma i anonimizacja giną po wyjściu ze sprawy
-  - [ ] projekt, zatwierdzone fragmenty do ukrycia i wynik kontroli zapisywane w katalogu sprawy
+- [x] **Zapisywanie stanu sprawy** – autozapis co 2 s i przy wyjściu ze sprawy (`stan.json` w katalogu sprawy)
+  - [x] projekt, zatwierdzone fragmenty do ukrycia i wynik kontroli zapisywane w katalogu sprawy
 - [ ] **Statusy spraw zmieniane na każdym kroku** (I11, J5) – dziś status ustawia się tylko przy dodaniu wniosku
   - [ ] brak działań → zapytania do wydziałów (po skopiowaniu prośby / wgraniu odpowiedzi) → odpowiedź przygotowana (po eksporcie) → wysłana
   - [ ] kwerenda + liczba dni (I11c), przycisk „Oznacz jako wysłane” z datą udzielenia odpowiedzi (dziś TODO)
