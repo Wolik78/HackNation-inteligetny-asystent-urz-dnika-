@@ -1,0 +1,67 @@
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- NiceGUI (app.storage) ---
+.nicegui/
+
+# --- Sekrety (klucze API do AI online na czas hackathonu) ---
+.env
+.env.*
+!.env.example
+*.key
+secrets.*
+.claude/settings.local.json
+
+# --- Dane osobowe: wnioski, odpowiedzi, eksporty ---
+# Domyślnie NIE commitujemy żadnych dokumentów – mogą zawierać dane osobowe.
+# Wyjątki: dane testowe od organizatorów (fikcyjne) i prezentacja.
+*.pdf
+*.doc
+*.docx
+*.odt
+*.rtf
+!dane_testowe/**
+!prezentacja/**
+
+# Dane robocze aplikacji (wgrane pliki, archiwum, eksporty, baza)
+dane/
+eksport/
+uploads/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Lokalny model i indeks wyszukiwania (duże pliki) ---
+modele/
+models/
+*.gguf
+*.safetensors
+*.onnx
+*.pt
+*.bin
+chroma/
+chroma_db/
+*.faiss
+
+# --- Budowanie .exe (PyInstaller / nicegui-pack) ---
+build/
+dist/
+*.spec
+
+# --- Logi ---
+*.log
+logs/
+
+# --- System / IDE ---
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+~$*
