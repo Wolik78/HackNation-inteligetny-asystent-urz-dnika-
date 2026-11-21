@@ -5,7 +5,7 @@ w katalogu danych. Później podmienimy to na bazę danych, nie zmieniając funk
 """
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 
 from .konfiguracja import KATALOG_DANYCH, TERMIN_DNI, TERMIN_KWERENDA
@@ -33,6 +33,8 @@ class Wniosek:
     kwerenda: bool = False
     kontakt: str = ''
     data_odpowiedzi: date | None = None
+    sugerowane_wydzialy: list[str] = field(default_factory=list)  # podpowiedź Bielika
+    uzasadnienie_wydzialu: str = ''
     testowy: bool = False
 
     @property
@@ -87,17 +89,24 @@ def nastepny_numer(rok: int | None = None) -> str:
 
 
 def dodaj(*, nr: str, temat: str, wnioskodawca: str, data_wplywu: date, kto: str,
-          kwerenda: bool = False, kontakt: str = '') -> Wniosek:
+          kwerenda: bool = False, kontakt: str = '', sugerowane_wydzialy: list[str] | None = None,
+          uzasadnienie_wydzialu: str = '') -> Wniosek:
     if any(w.nr == nr for w in _wnioski):
         raise ValueError(f'Wniosek o numerze {nr} już istnieje.')
     wniosek = Wniosek(
         id=max((w.id for w in _wnioski), default=0) + 1,
         nr=nr, temat=temat, wnioskodawca=wnioskodawca, data_wplywu=data_wplywu, kto=kto,
         status='kwerenda' if kwerenda else 'brak', kwerenda=kwerenda, kontakt=kontakt,
+        sugerowane_wydzialy=list(sugerowane_wydzialy or []), uzasadnienie_wydzialu=uzasadnienie_wydzialu,
     )
     _wnioski.append(wniosek)
     _zapisz()
     return wniosek
+
+
+def zapisz_zmiany() -> None:
+    """Utrwala zmiany wprowadzone w obiektach Wniosek (np. podpowiedzi AI)."""
+    _zapisz()
 
 
 def _zapisz() -> None:

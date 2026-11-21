@@ -1,7 +1,12 @@
 """Układ aplikacji (nagłówek, menu, routing) i uruchomienie okna."""
 
+from collections.abc import Callable
+
 from nicegui import app, ui
 
+from ..uslugi import bielik
+from .czat import panel_czatu
+from .kontekst import biezacy
 from .strony import (strona_archiwum, strona_baza_wiedzy, strona_nowy_wniosek, strona_sprawa,
                      strona_ustawienia, strona_wnioski)
 
@@ -33,6 +38,25 @@ window.addEventListener('drop', (e) => e.preventDefault());
 '''
 
 
+def wskaznik_modelu() -> None:
+    """Etykieta w nagłówku pokazująca na żywo, czy lokalny Bielik jest dostępny."""
+    with ui.row().classes('items-center gap-1 rounded-borders q-px-sm q-py-xs bg-grey-7') as etykieta:
+        ikona = ui.icon('hourglass_empty')
+        tekst = ui.label('Sprawdzam Bielika…')
+        podpowiedz = ui.tooltip('')
+
+    async def sprawdz() -> None:
+        status = await bielik.status()
+        etykieta.classes(replace='items-center gap-1 rounded-borders q-px-sm q-py-xs '
+                                 + ('bg-green-8' if status.dostepny else 'bg-red-8'))
+        ikona.name = 'lock' if status.dostepny else 'cloud_off'
+        tekst.set_text('Bielik lokalnie · offline' if status.dostepny else 'Bielik niedostępny')
+        podpowiedz.set_text(status.komunikat)
+
+    ui.timer(15, sprawdz)
+    ui.timer(0.1, sprawdz, once=True)
+
+
 def root() -> None:
     ui.add_css(CSS)
     ui.add_body_html(BLOKADA_UPUSZCZANIA)
@@ -44,9 +68,10 @@ def root() -> None:
             with ui.column().classes('gap-0'):
                 ui.label('Asystent UDIP').classes('text-h6')
                 ui.label('Urząd Miasta Bydgoszczy').classes('text-caption')
-        with ui.row().classes('items-center gap-1 bg-green-8 rounded-borders q-px-sm q-py-xs'):
-            ui.icon('lock')
-            ui.label('Model lokalny · offline')
+        with ui.row().classes('items-center gap-3'):
+            ui.button('Urzęduś', icon='smart_toy', on_click=lambda: panel_urzedusia.toggle()) \
+                .props('unelevated no-caps color=white text-color=primary').tooltip('Asystent AI')
+            wskaznik_modelu()
 
     with ui.left_drawer(value=True, bordered=True).props('width=230').classes('bg-white'):
         with ui.list().classes('w-full'):
@@ -57,15 +82,27 @@ def root() -> None:
                     with ui.item_section():
                         ui.item_label(nazwa)
 
+    with ui.right_drawer(value=False, bordered=True).props('width=440').classes('bg-white') as panel_urzedusia:
+        with ui.column().classes('w-full h-full no-wrap gap-2'):
+            panel_czatu(zamknij=panel_urzedusia.hide)
+
     with ui.column().classes('w-full q-pa-md'):
         ui.sub_pages({
-            '/': strona_wnioski,
-            '/nowy': strona_nowy_wniosek,
-            '/sprawa/{id}': strona_sprawa,
-            '/archiwum': strona_archiwum,
-            '/baza': strona_baza_wiedzy,
-            '/ustawienia': strona_ustawienia,
+            '/': _bez_sprawy(strona_wnioski),
+            '/nowy': _bez_sprawy(strona_nowy_wniosek),
+            '/sprawa/{id}': strona_sprawa,  # sama ustawia kontekst sprawy dla Urzędusia
+            '/archiwum': _bez_sprawy(strona_archiwum),
+            '/baza': _bez_sprawy(strona_baza_wiedzy),
+            '/ustawienia': _bez_sprawy(strona_ustawienia),
         })
+
+
+def _bez_sprawy(strona: Callable[[], None]) -> Callable[[], None]:
+    """Ekran bez otwartej sprawy – Urzęduś przestaje na niej pracować."""
+    def opakowana() -> None:
+        biezacy().zamknij_sprawe()
+        strona()
+    return opakowana
 
 
 def uruchom(*, tryb_web: bool = False) -> None:

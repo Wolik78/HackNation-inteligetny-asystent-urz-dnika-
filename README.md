@@ -20,7 +20,13 @@ GUI.py                    punkt startowy
 asystent/
   konfiguracja.py         ścieżki, limity, terminy
   rejestr.py              lista wniosków (10 testowych + dodane przez urzędnika)
-  uslugi.py               wspólne instancje (magazyn plików)
+  uslugi.py               wspólne instancje (magazyn plików, klient Bielika)
+  anonimizacja.py         wzorce danych osobowych, podział tekstu, maskowanie
+  ai/
+    bielik_service.py     asynchroniczny klient LM Studio (analiza, dane osobowe, stream pisma)
+    urzedus.py            czat Urzęduś: rozpoznawanie poleceń, regulacje zakresu, czynności
+    prompty.py            prompty modułów AI – do strojenia bez ruszania logiki
+    prompty_czatu.py      prompty i ściąga z ustawy dla Urzędusia
   pliki/                  obsługa plików – bez zależności od GUI
     walidacja.py          typ, rozmiar, sygnatura pliku, bezpieczna nazwa
     ekstrakcja.py         tekst z PDF / DOCX / DOC / TXT
@@ -28,10 +34,64 @@ asystent/
     eksport.py            zapis pisma do .docx / .txt
   gui/
     aplikacja.py          układ okna, menu, routing
+    czat.py               panel czatu Urzęduś
+    kontekst.py           która sprawa jest otwarta w danym oknie
     komponenty.py         pole „przeciągnij i upuść”, karta pliku, …
     strony/               jeden moduł na ekran
 tests/                    testy (pytest)
 ```
+
+## Asystent AI – lokalny Bielik
+
+Aplikacja korzysta z modelu **Bielik 4.5B v3.0 Instruct** uruchomionego w **LM Studio** na tym komputerze
+(serwer API zgodny z OpenAI). Żaden tekst nie wychodzi poza komputer.
+
+1. W LM Studio załaduj `bielik-4.5b-v3.0-instruct` (Context Length: 3072) i włącz *Local Server* na porcie **1235**.
+2. Uruchom aplikację – w nagłówku pojawi się zielone „Bielik lokalnie · offline”.
+
+Co robi Bielik:
+- **Nowy wniosek** – po wgraniu pliku sam proponuje skrócony opis, wydziały i ocenę, czy potrzebna jest kwerenda.
+- **Sprawa → Wydziały** – propozycja wydziałów z uzasadnieniem (gdy wniosek dograno później).
+- **Sprawa → Projekt odpowiedzi** – pisze projekt pisma na żywo (stream) na podstawie wniosku, odpowiedzi
+  wydziałów i opcjonalnego wzoru z archiwum.
+- **Sprawa → Anonimizacja** – wskazuje dane osób prywatnych (bez urzędników pełniących funkcje publiczne);
+  dodatkowo PESEL, telefony, e-maile i numery kont wykrywane są wzorcami. Urzędnik zatwierdza, eksport je maskuje.
+
+### Kontrola jakości pisma (przeciw błędom i halucynacjom AI)
+
+W kroku „Projekt odpowiedzi” przycisk **Sprawdź pismo** (uruchamia się też sam po wygenerowaniu pisma):
+- **liczby i daty** – każda wartość w piśmie jest szukana we wniosku i odpowiedziach wydziałów: zielona ma źródło
+  (podpowiedź pokazuje które), czerwona nie ma pokrycia; różne zapisy tej samej wartości są rozpoznawane
+  (1 240 000 = 1.240.000, 20.11.2026 = 20 listopada 2026); odwołania do przepisów są pomijane,
+- **pominięte dane** – wartości z odpowiedzi wydziałów, których nie ma w piśmie (np. zgubiona kampania),
+- **forma** – pola [UZUPEŁNIĆ], brak podstawy prawnej, zwrotu grzecznościowego, „Z poważaniem”, resztki Markdown,
+  nieukryte dane osobowe,
+- **kompletność (Bielik)** – czy pismo odpowiada na każde żądanie z wniosku; żądanie liczy się jako spełnione tylko,
+  gdy model zacytuje fragment pisma, który naprawdę w nim jest.
+
+Wynik kontroli widać też w kroku „Eksport”, a Urzęduś robi to samo na polecenie „Sprawdź pismo”.
+Kod: `asystent/kontrola.py` (bez AI) i `BielikService.sprawdz_kompletnosc`.
+
+### Urzęduś – czat asystenta
+
+Przycisk **Urzęduś** w nagłówku otwiera panel czatu. Urzęduś wie, która sprawa jest otwarta, i pracuje na jej
+dokumentach: streszcza wniosek, odpowiada na pytania o dokumenty, proponuje wydziały, pisze prośby do wydziałów,
+zawiadomienia o przedłużeniu terminu, prośby o doprecyzowanie i projekt odpowiedzi, szuka danych osobowych,
+pokazuje pilne terminy i wyjaśnia przepisy UDIP. Odpowiada też na pytania o samą aplikację („do czego służy
+Archiwum?”) – z wbudowanego podręcznika (`asystent/ai/podrecznik.py`, aktualizuj go przy zmianach w aplikacji) –
+oraz o siebie i swój zakres obowiązków. Wyniki trafiają do sprawy dopiero po kliknięciu urzędnika
+(„Wstaw do projektu”, „Zapisz w sprawie”, „Oznacz w anonimizacji”).
+
+Regulacje – Urzęduś zajmuje się wyłącznie wnioskami UDIP, pilnowane warstwowo:
+1. prośby o kod, rozrywkę i próby obejścia zasad są odrzucane od razu, bez pytania modelu;
+2. polecenie trafia do jednej z zamkniętej listy czynności (słowa kluczowe, a w razie wątpliwości klasyfikator Bielika);
+3. każdy prompt zawiera reguły zakresu, a dokumenty są podawane jako dane, nie polecenia;
+4. odpowiedź z kodem jest przerywana; o przepisach – pokazywana tylko z podstawą prawną (art.);
+   o sprawie – tylko gdy opiera się na jej dokumentach.
+
+Gdy LM Studio jest wyłączone, aplikacja działa dalej – pola wypełnia się ręcznie, a anonimizacja korzysta z wzorców.
+Ustawienia przez zmienne środowiskowe: `UDIP_LLM_URL` (domyślnie `http://localhost:1235/v1`), `UDIP_LLM_MODEL`,
+`UDIP_LLM_LIMIT_ZNAKOW` (domyślnie 6000; klient sam zmniejsza limit, jeśli okno kontekstu modelu jest mniejsze).
 
 ## Obsługa plików
 

@@ -48,6 +48,20 @@ def kafelek(liczba: int, opis: str, kolor: str) -> None:
         ui.label(opis).classes('text-grey-7')
 
 
+def blad_ai(tresc: str) -> None:
+    """Komunikat o niedostępnym lub błędnie działającym modelu – zostaje dłużej, bo bywa długi."""
+    ui.notify(tresc, type='warning', multi_line=True, timeout=12_000, close_button='OK')
+
+
+def wskaznik_postepu(tekst: str) -> ui.row:
+    """Ukryty wiersz „spinner + opis” do pokazywania w trakcie pracy modelu."""
+    with ui.row().classes('items-center gap-2 text-primary') as wiersz:
+        ui.spinner(size='sm')
+        ui.label(tekst).classes('text-caption')
+    wiersz.set_visibility(False)
+    return wiersz
+
+
 def otworz_w_systemie(sciezka: Path) -> None:
     """Otwiera plik lub folder w domyślnym programie (aplikacja działa lokalnie)."""
     if sys.platform == 'win32':
@@ -87,13 +101,16 @@ def strefa_wgrywania(obsluga: Callable[[WgranePliki], Awaitable[None]], *,
     typy = ', '.join(r.lstrip('.').upper() for r in DOZWOLONE_ROZSZERZENIA)
     limit_mb = MAKS_ROZMIAR_PLIKU // 1024 // 1024
 
+    # Czyścimy pole przed obsługą – obsługa (np. analiza AI) może potrwać albo usunąć samo pole z ekranu.
     async def jeden(e: events.UploadEventArguments) -> None:
-        await obsluga([(e.file.name, await e.file.read())])
+        pliki = [(e.file.name, await e.file.read())]
         upload.reset()
+        await obsluga(pliki)
 
     async def wiele_naraz(e: events.MultiUploadEventArguments) -> None:
-        await obsluga([(f.name, await f.read()) for f in e.files])
+        pliki = [(f.name, await f.read()) for f in e.files]
         upload.reset()
+        await obsluga(pliki)
 
     upload = ui.upload(
         multiple=wiele, auto_upload=True, max_file_size=MAKS_ROZMIAR_PLIKU,

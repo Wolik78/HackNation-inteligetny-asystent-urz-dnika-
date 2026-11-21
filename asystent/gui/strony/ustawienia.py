@@ -2,17 +2,29 @@
 
 from nicegui import ui
 
-from ...konfiguracja import KATALOG_DANYCH, TERMIN_DNI, TERMIN_KWERENDA
+from ...konfiguracja import KATALOG_DANYCH, LLM_LIMIT_ZNAKOW, TERMIN_DNI, TERMIN_KWERENDA
+from ...uslugi import bielik
 from ..komponenty import naglowek_strony, otworz_w_systemie, todo
 
 
 def strona_ustawienia() -> None:
     naglowek_strony('Ustawienia')
     with ui.card().classes('w-[40rem]').props('flat bordered'):
-        ui.label('Model AI').classes('text-subtitle1 text-weight-medium')
-        ui.radio({'lokalny': 'Lokalny – offline (docelowo w urzędzie)',
-                  'online': 'Online – tylko na czas hackathonu'}, value='lokalny')
-        ui.input('Nazwa / ścieżka modelu', placeholder='np. bielik-11b-v2.3-instruct').classes('w-full')
+        ui.label('Model AI (lokalny)').classes('text-subtitle1 text-weight-medium')
+        with ui.grid(columns=2).classes('gap-x-6 gap-y-1'):
+            for etykieta, wartosc in [('Model', bielik.model), ('Adres serwera', bielik.url),
+                                      ('Tekst w jednym zapytaniu', f'do {LLM_LIMIT_ZNAKOW} znaków'),
+                                      ('Temperatura', str(bielik.temperatura))]:
+                ui.label(etykieta).classes('text-grey-7')
+                ui.label(wartosc)
+        ui.label('Zmiana: zmienne środowiskowe UDIP_LLM_URL, UDIP_LLM_MODEL, UDIP_LLM_LIMIT_ZNAKOW.') \
+            .classes('text-caption text-grey-6')
+
+        async def sprawdz() -> None:
+            status = await bielik.status()
+            ui.notify(status.komunikat, type='positive' if status.dostepny else 'negative', multi_line=True)
+
+        ui.button('Sprawdź połączenie', icon='network_check', on_click=sprawdz).props('outline')
 
         ui.separator().classes('my-2')
         ui.label('Terminy').classes('text-subtitle1 text-weight-medium')
