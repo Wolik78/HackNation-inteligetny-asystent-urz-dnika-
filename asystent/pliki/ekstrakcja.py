@@ -1,5 +1,6 @@
-"""Wyciąganie tekstu z wgranych dokumentów (PDF, DOCX, DOC, TXT).
+"""Wyciąganie tekstu z wgranych dokumentów (PDF, DOCX, DOC, TXT, zdjęcia JPG/PNG).
 
+Skany, zdjęcia i Wordy z wklejonym zdjęciem kartki są odczytywane OCR-em (moduł `ocr`).
 Wszystko działa lokalnie, bez wysyłania plików na zewnątrz.
 """
 
@@ -12,6 +13,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import ocr
 from .walidacja import BladPliku
 
 log = logging.getLogger(__name__)
@@ -31,6 +33,9 @@ def wyciagnij_tekst(sciezka: Path) -> WynikEkstrakcji:
         '.docx': _z_docx,
         '.doc': _z_doc,
         '.txt': _z_txt,
+        '.jpg': _z_obrazu,
+        '.jpeg': _z_obrazu,
+        '.png': _z_obrazu,
     }.get(sciezka.suffix.lower())
     if obsluga is None:
         raise BladPliku(f'Nie umiem odczytać plików {sciezka.suffix}.')
@@ -73,12 +78,28 @@ def _z_pdf(sciezka: Path) -> WynikEkstrakcji:
 
     strony = [(strona.extract_text() or '') for strona in czytnik.pages]
     ostrzezenia = []
+    do_ocr = [nr for nr, s in enumerate(strony) if len(s.strip()) < ocr.MIN_ZNAKOW_STRONY]
+    if do_ocr and ocr.dostepny():
+        odczytane = 0
+        for nr, tekst in ocr.strony_pdf_do_ocr(sciezka, do_ocr).items():
+            if len(tekst.strip()) > len(strony[nr].strip()):
+                strony[nr] = tekst
+                odczytane += 1
+        if odczytane:
+            ostrzezenia.append(_ostrzezenie_ocr(f'{odczytane} z {len(strony)} stron' if len(strony) > 1 else 'skan'))
+
     puste = sum(1 for s in strony if not s.strip())
     if strony and puste == len(strony):
-        ostrzezenia.append('PDF nie ma warstwy tekstowej (prawdopodobnie skan). Tekst trzeba będzie odczytać OCR-em.')
+        ostrzezenia.append('PDF nie ma warstwy tekstowej (prawdopodobnie skan), a OCR nie odczytał tekstu.'
+                           if ocr.dostepny() else
+                           'PDF nie ma warstwy tekstowej (prawdopodobnie skan), a OCR jest niedostępny na tym komputerze.')
     elif puste:
         ostrzezenia.append(f'{puste} z {len(strony)} stron nie zawiera tekstu (możliwe skany).')
     return WynikEkstrakcji('\n\n'.join(strony), len(strony), ostrzezenia)
+
+
+def _ostrzezenie_ocr(co: str) -> str:
+    return f'Tekst odczytany OCR-em ({co}) – sprawdź go z oryginałem, zwłaszcza liczby, nazwiska i pismo odręczne.'
 
 
 # --- DOCX --------------------------------------------------------------------
@@ -94,7 +115,17 @@ def _z_docx(sciezka: Path) -> WynikEkstrakcji:
             czesci.extend(_tabela_na_tekst(blok))
         else:
             czesci.append(blok.text)
-    return WynikEkstrakcji('\n'.join(czesci))
+    tekst = '\n'.join(czesci)
+    if len(tekst.strip()) >= ocr.MIN_ZNAKOW_STRONY or not ocr.dostepny():
+        return WynikEkstrakcji(tekst)
+    # Word z wklejonym zdjęciem kartki – odczytujemy zdjęcia OCR-em
+    obrazy = [czesc.blob for czesc in dokument.part.related_parts.values()
+              if czesc.content_type.startswith('image/')]
+    odczytane = [t for t in (ocr.rozpoznaj_obraz(blob) for blob in obrazy) if t.strip()]
+    if not odczytane:
+        return WynikEkstrakcji(tekst)
+    return WynikEkstrakcji('\n\n'.join([tekst, *odczytane]),
+                           ostrzezenia=[_ostrzezenie_ocr(f'zdjęcia w dokumencie: {len(odczytane)}')])
 
 
 def _tabela_na_tekst(tabela) -> list[str]:
@@ -150,3 +181,14 @@ def _z_txt(sciezka: Path) -> WynikEkstrakcji:
             continue
     return WynikEkstrakcji(dane.decode('utf-8', errors='replace'),
                            ostrzezenia=['Nierozpoznane kodowanie znaków – część liter może być błędna.'])
+
+
+# --- zdjęcia (JPG / PNG) -------------------------------------------------------
+
+def _z_obrazu(sciezka: Path) -> WynikEkstrakcji:
+    if not ocr.dostepny():
+        return WynikEkstrakcji('', 1, ['Zdjęcie – OCR jest niedostępny na tym komputerze, tekstu nie odczytano.'])
+    tekst = ocr.rozpoznaj_obraz(sciezka.read_bytes())
+    if not tekst.strip():
+        return WynikEkstrakcji('', 1, ['OCR nie odczytał tekstu ze zdjęcia (za słaba jakość?).'])
+    return WynikEkstrakcji(tekst, 1, [_ostrzezenie_ocr('zdjęcie')])

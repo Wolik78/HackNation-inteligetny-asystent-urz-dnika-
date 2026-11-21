@@ -37,11 +37,13 @@ SEKCJE = (
         'albo usunąć wniosek. Każda zmiana trafia do „Przebiegu sprawy” w kroku Wniosek.'
     )),
     Sekcja('Nowy wniosek', ('nowy wniosek', 'nowego wniosku', 'dodac wniosek', 'dodaj wniosek', 'wgrac wniosek',
+                            'ocr', 'skan', 'zdjec',
                             'wgrac plik', 'zarejestr', 'przeciagn'), (
-        'Nowy wniosek: przeciągnij plik PDF albo Word na pole po lewej (albo kliknij je i wybierz plik). '
-        'Aplikacja odczyta tekst i od razu dopasuje wydziały z wykazu BIP, a Bielik zaproponuje skrócony opis, '
-        'doprecyzuje wydziały i oceni, czy potrzebna jest kwerenda. Uzupełnij wnioskodawcę, sprawdź dane i kliknij „Zatwierdź i dodaj do listy” – wniosek trafi '
-        'do kalendarza, a plik do dokumentów sprawy.'
+        'Nowy wniosek: przeciągnij plik PDF, Word albo zdjęcie (JPG/PNG) na pole po lewej (albo kliknij je i wybierz '
+        'plik). Skany i zdjęcia aplikacja odczyta OCR-em – sprawdź taki tekst z oryginałem, zwłaszcza pismo odręczne. '
+        'Od razu dopasuje też wydziały z wykazu BIP, a Bielik zaproponuje skrócony opis, doprecyzuje wydziały '
+        'i oceni, czy potrzebna jest kwerenda. Uzupełnij wnioskodawcę, sprawdź dane i kliknij „Zatwierdź i dodaj '
+        'do listy” – wniosek trafi do kalendarza, a plik do dokumentów sprawy.'
     )),
     Sekcja('Sprawa', ('sprawa', 'sprawy', 'krok', 'etap', 'stepper', 'wydzial', 'odpowiedzi wydzial',
                       'podobne sprawy'), (

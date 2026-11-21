@@ -17,6 +17,9 @@ SYGNATURY = {
     '.pdf': b'%PDF-',
     '.docx': b'PK\x03\x04',
     '.doc': b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1',
+    '.jpg': b'\xFF\xD8\xFF',
+    '.jpeg': b'\xFF\xD8\xFF',
+    '.png': b'\x89PNG\r\n\x1a\n',
 }
 
 # Ochrona przed „zip bombą” – DOCX to archiwum ZIP.

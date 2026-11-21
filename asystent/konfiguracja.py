@@ -9,7 +9,7 @@ KATALOG_PROJEKTU = Path(__file__).resolve().parent.parent
 # Można go przenieść zmienną środowiskową, np. na zaszyfrowany dysk urzędu.
 KATALOG_DANYCH = Path(os.environ.get('UDIP_KATALOG_DANYCH', KATALOG_PROJEKTU / 'dane'))
 
-DOZWOLONE_ROZSZERZENIA = ('.pdf', '.docx', '.doc', '.txt')
+DOZWOLONE_ROZSZERZENIA = ('.pdf', '.docx', '.doc', '.txt', '.jpg', '.jpeg', '.png')  # zdjęcia – przez OCR
 MAKS_ROZMIAR_PLIKU = 25 * 1024 * 1024  # 25 MB
 
 TERMIN_DNI = 14         # art. 13 ust. 1 UDIP (kwerenda: do 2 miesięcy – patrz rejestr.MIESIACE_KWERENDY)

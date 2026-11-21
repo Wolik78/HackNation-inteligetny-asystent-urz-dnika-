@@ -61,7 +61,8 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 - [ ] P1 Klasyfikacja wniosku i ścieżka postępowania: zwykła / przetworzona / nie jest informacją publiczną / dostępna w BIP / do doprecyzowania → odpowiedź, decyzja odmowna albo prośba o doprecyzowanie
 - [ ] P2 Rozgrzanie modelu przy starcie aplikacji (pierwsze zapytanie jest najwolniejsze)
 - [ ] P2 Odczyt danych z wniosku: wnioskodawca, e-mail/adres do odpowiedzi
-- [ ] P2 OCR skanów offline (Tesseract) – dziś skan dostaje tylko ostrzeżenie
+- [x] P2 OCR skanów i zdjęć offline (OCR Windows, jak w `program2.py`) – PDF bez tekstu, JPG/PNG, Word ze zdjęciem
+  - [ ] P2 pismo odręczne – OCR Windows czyta je słabo; sprawdzić na prawdziwych skanach od mentorów
 - [ ] P2 Zawiadomienie o kwerendzie z jednego kliknięcia przy zaznaczeniu kwerendy
 
 ## 4. Bezpieczeństwo i RODO (20% oceny)

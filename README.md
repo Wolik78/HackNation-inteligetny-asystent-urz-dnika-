@@ -114,9 +114,15 @@ Ustawienia przez zmienne środowiskowe: `UDIP_LLM_URL` (domyślnie `http://local
 ## Obsługa plików
 
 - Wnioski, odpowiedzi wydziałów i dokumenty bazy wiedzy wgrywa się **przeciągając plik na pole** (albo klikając je).
-- Obsługiwane: PDF, DOCX, DOC (wymaga LibreOffice), TXT; do 25 MB.
+- Obsługiwane: PDF, DOCX, DOC (wymaga LibreOffice), TXT, zdjęcia JPG/PNG; do 25 MB.
 - Każdy plik jest sprawdzany (rozszerzenie **i** zawartość), a jego tekst odczytywany lokalnie.
-  Skany bez warstwy tekstowej i PDF-y z hasłem są wyraźnie oznaczane.
+  PDF-y z hasłem są odrzucane z czytelnym komunikatem.
+- **OCR** (`asystent/pliki/ocr.py`): skany PDF (strony bez tekstu), zdjęcia JPG/PNG i Wordy z wklejonym zdjęciem
+  kartki są odczytywane silnikiem OCR wbudowanym w Windows (język polski, offline, ok. 1 s na stronę) –
+  to samo podejście co w `program2.py`. Tekst z OCR dostaje ostrzeżenie „sprawdź z oryginałem”.
+  Druk i skany pism czyta bardzo dobrze, **pismo odręczne – słabo**.
+  Wymaga polskiego pakietu OCR w Windows (jest w polskim Windows; inaczej: Ustawienia → Czas i język → Język →
+  polski → Opcje języka → Rozpoznawanie tekstu). Bez niego aplikacja działa, a skan dostaje tylko ostrzeżenie.
 - Dane leżą wyłącznie na tym komputerze, w folderze `dane/` (poza gitem). Inny folder: zmienna `UDIP_KATALOG_DANYCH`.
 
 ```
