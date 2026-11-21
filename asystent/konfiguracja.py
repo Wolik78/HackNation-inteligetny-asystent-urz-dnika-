@@ -12,8 +12,7 @@ KATALOG_DANYCH = Path(os.environ.get('UDIP_KATALOG_DANYCH', KATALOG_PROJEKTU / '
 DOZWOLONE_ROZSZERZENIA = ('.pdf', '.docx', '.doc', '.txt')
 MAKS_ROZMIAR_PLIKU = 25 * 1024 * 1024  # 25 MB
 
-TERMIN_DNI = 14         # art. 13 ust. 1 UDIP
-TERMIN_KWERENDA = 60    # art. 13 ust. 2 UDIP – do 2 miesięcy
+TERMIN_DNI = 14         # art. 13 ust. 1 UDIP (kwerenda: do 2 miesięcy – patrz rejestr.MIESIACE_KWERENDY)
 
 # Lokalny model językowy (LM Studio, API zgodne z OpenAI). Działa tylko na tym komputerze.
 LLM_URL = os.environ.get('UDIP_LLM_URL', 'http://localhost:1235/v1')

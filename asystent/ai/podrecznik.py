@@ -19,11 +19,22 @@ class Sekcja:
 
 SEKCJE = (
     Sekcja('Wnioski', ('wnioski', 'lista', 'kalendarz', 'ekran glown', 'tabel', 'kolor', 'kafel', 'pilnos',
-                       'rok'), (
-        'Wnioski to ekran główny – kalendarz wszystkich wniosków ułożonych od najstarszych do najnowszych. '
-        'Kolory pokazują pilność: czerwony – termin dziś albo już minął, pomarańczowy – termin jutro, '
-        'żółty – zostały najwyżej 3 dni, szary – odpowiedź wysłana. Kafelki na górze liczą wnioski na dziś, '
-        'na jutro, w przygotowaniu i z kwerendą. Kliknięcie wiersza otwiera sprawę. Rok wybierasz w prawym górnym rogu.'
+                       'rok', 'miesiac', 'filtr', 'termin'), (
+        'Wnioski to ekran główny – kalendarz wniosków od najstarszych do najnowszych. Kolory pokazują pilność: '
+        'czerwony – termin dziś albo już minął, pomarańczowy – termin w najbliższy dzień roboczy, żółty – do 3 dni '
+        'roboczych, szary – odpowiedź wysłana. Terminy liczą się same: 14 dni od wpływu, a gdy wypadają w sobotę, '
+        'niedzielę lub święto – przesuwają się na najbliższy dzień roboczy (ikonka „i” przy terminie). '
+        'Możesz filtrować (pilne, w toku, kwerendy, wysłane), szukać po numerze, temacie i wnioskodawcy, wybrać rok '
+        'i prowadzącego, a kliknięcie kafelka pokazuje te wnioski. Przełącznik „Miesiąc” pokazuje siatkę kalendarza '
+        'z wnioskami w dniach terminu.'
+    )),
+    Sekcja('Statusy', ('status', 'etap', 'wyslan', 'kwerend', 'przedluz', 'edytuj', 'usun', 'przebieg',
+                       'histori'), (
+        'Status sprawy widać na kolorowym przycisku w nagłówku sprawy – kliknij, żeby go zmienić. Zmienia się też '
+        'sam: po wgraniu odpowiedzi wydziału na „Zapytania wysłane do wydziałów”, po zapisaniu pisma na „Odpowiedź '
+        'przygotowana”, a „Oznacz jako wysłane” w kroku Eksport zamyka sprawę z datą odpowiedzi. Menu „⋮” obok '
+        'statusu pozwala edytować dane wniosku, ustawić kwerendę (nowy termin, najwyżej 2 miesiące od złożenia) '
+        'albo usunąć wniosek. Każda zmiana trafia do „Przebiegu sprawy” w kroku Wniosek.'
     )),
     Sekcja('Nowy wniosek', ('nowy wniosek', 'nowego wniosku', 'dodac wniosek', 'dodaj wniosek', 'wgrac wniosek',
                             'wgrac plik', 'zarejestr', 'przeciagn'), (

@@ -39,6 +39,13 @@ PROJEKT_ODPOWIEDZI = (
 Odswiezacz = Callable[[], None] | None
 
 
+def _awansuj(w: Wniosek, status: str, powod: str, po_zmianie: Callable[[], None]) -> None:
+    """Automatyczna zmiana statusu po czynności urzędnika (tylko do przodu) z krótką informacją."""
+    if rejestr.awansuj_status(w, status, powod):
+        ui.notify(f'Status sprawy: {w.status_opis}.', type='info', icon='flag')
+        po_zmianie()
+
+
 def _tekst_wniosku(w: Wniosek) -> str:
     pliki = magazyn.lista(Kategoria.WNIOSEK, sprawa=w.nr)
     return pliki[0].tekst() if pliki else ''
@@ -47,12 +54,29 @@ def _tekst_wniosku(w: Wniosek) -> str:
 # --- krok 1: wniosek -----------------------------------------------------------------
 
 def _krok_wniosek(w: Wniosek) -> Odswiezacz:
-    with ui.grid(columns=2).classes('gap-x-8 gap-y-1'):
-        for etykieta, wartosc in [('Wnioskodawca', w.wnioskodawca), ('Kontakt', w.kontakt or '—'),
-                                  ('Data wpływu', f'{w.data_wplywu:%d.%m.%Y}'),
-                                  ('Termin', f'{w.termin:%d.%m.%Y}'), ('Prowadzi', w.kto)]:
-            ui.label(etykieta).classes('text-grey-7')
-            ui.label(wartosc)
+    @ui.refreshable
+    def dane_i_przebieg() -> None:
+        with ui.row().classes('w-full items-start no-wrap gap-8'):
+            with ui.grid(columns=2).classes('gap-x-8 gap-y-1'):
+                termin = f'{w.termin:%d.%m.%Y}' + (f' (kwerenda +{w.dni_kwerendy} dni)' if w.kwerenda else '')
+                for etykieta, wartosc in [('Wnioskodawca', w.wnioskodawca), ('Kontakt', w.kontakt or '—'),
+                                          ('Data wpływu', f'{w.data_wplywu:%d.%m.%Y}'), ('Termin', termin),
+                                          ('Prowadzi', w.kto), ('Status', w.status_opis),
+                                          ('Data odpowiedzi', f'{w.data_odpowiedzi:%d.%m.%Y}' if w.data_odpowiedzi
+                                           else '—')]:
+                    ui.label(etykieta).classes('text-grey-7')
+                    ui.label(wartosc)
+                if w.uwaga_o_terminie:
+                    ui.label('')
+                    ui.label(w.uwaga_o_terminie).classes('text-caption text-grey-7')
+            with ui.expansion('Przebieg sprawy', icon='history', value=True).props('dense').classes('col'):
+                with ui.timeline(side='right').props('dense color=primary layout=dense'):
+                    for wpis in reversed(w.historia):
+                        kiedy = wpis['kiedy'].replace('T', ' ')
+                        ui.timeline_entry(wpis['zdarzenie'],
+                                          subtitle=f'{kiedy[8:10]}.{kiedy[5:7]}.{kiedy[:4]} {kiedy[11:16]}')
+
+    dane_i_przebieg()
     ui.separator().classes('my-2')
 
     async def wgraj(pliki: WgranePliki) -> None:
@@ -74,7 +98,7 @@ def _krok_wniosek(w: Wniosek) -> Odswiezacz:
             strefa_wgrywania(wgraj, tytul='Przeciągnij tutaj plik wniosku')
 
     pliki_wniosku()
-    return None
+    return dane_i_przebieg.refresh
 
 
 # --- krok 2: podobne sprawy -----------------------------------------------------------
@@ -153,7 +177,7 @@ def _krok_wydzialy(w: Wniosek) -> Odswiezacz:
 
 # --- krok 4: odpowiedzi wydziałów ------------------------------------------------------
 
-def _krok_odpowiedzi(w: Wniosek) -> Odswiezacz:
+def _krok_odpowiedzi(w: Wniosek, po_zmianie_statusu: Callable[[], None]) -> Odswiezacz:
     ui.label('Odpowiedzi z wydziałów').classes('text-weight-medium')
     with ui.row().classes('w-full items-start no-wrap gap-6'):
         with ui.column().classes('w-[26rem] shrink-0'):
@@ -166,6 +190,7 @@ def _krok_odpowiedzi(w: Wniosek) -> Odswiezacz:
         zapis = lambda n, d: magazyn.zapisz(d, n, Kategoria.ODPOWIEDZ_WYDZIALU, sprawa=w.nr, opis=wydzial.value)
         if await zapisz_wgrane(pliki, zapis):
             odpowiedzi.refresh()
+            _awansuj(w, 'wydzialy', 'wgrano odpowiedź wydziału', po_zmianie_statusu)
 
     async def usun(plik: ZapisanyPlik) -> None:
         await run.io_bound(magazyn.usun, plik)
@@ -512,7 +537,7 @@ async def _zapisz_pismo(w: Wniosek, tekst: str, format: str) -> Path | None:
     return cel
 
 
-def _krok_eksport(w: Wniosek, stan: dict) -> Odswiezacz:
+def _krok_eksport(w: Wniosek, stan: dict, po_zmianie_statusu: Callable[[], None]) -> Odswiezacz:
     ui.label('Eksport i zamknięcie sprawy').classes('text-weight-medium')
 
     @ui.refreshable
@@ -536,6 +561,7 @@ def _krok_eksport(w: Wniosek, stan: dict) -> Odswiezacz:
             return
         await _zapisz_pismo(w, zamaskuj(stan['projekt'], stan['ukryte']), format)
         eksporty.refresh()
+        _awansuj(w, 'przygotowana', f'zapisano pismo (.{format})', po_zmianie_statusu)
 
     def otworz_folder() -> None:
         katalog = magazyn.katalog_sprawy(w.nr)
@@ -558,11 +584,152 @@ def _krok_eksport(w: Wniosek, stan: dict) -> Odswiezacz:
 
     eksporty()
     ui.separator().classes('my-2')
+    ui.label('Aplikacja niczego nie wysyła – po wysłaniu pisma oznacz to tutaj, żeby zamknąć sprawę w kalendarzu.') \
+        .classes('text-caption text-grey-7')
+
+    def oznacz_wyslane() -> None:
+        try:
+            data = date.fromisoformat(data_odpowiedzi.value)
+        except (TypeError, ValueError):
+            ui.notify('Podaj poprawną datę udzielenia odpowiedzi.', type='warning')
+            return
+        if data > date.today():
+            ui.notify('Data udzielenia odpowiedzi nie może być z przyszłości.', type='warning')
+            return
+        if rejestr.zmien_status(w, 'wyslana', data_odpowiedzi=data, powod='oznaczono po wysłaniu pisma'):
+            ui.notify(f'Sprawa {w.nr} zamknięta – odpowiedź wysłana {data:%d.%m.%Y}.', type='positive')
+            po_zmianie_statusu()
+
     with ui.row().classes('items-center'):
-        ui.date_input('Data udzielenia odpowiedzi', value=date.today().isoformat())
-        ui.button('Oznacz jako wysłane', icon='mark_email_read', color='positive',
-                  on_click=todo('zmiana statusu na "wysłana"'))
+        data_odpowiedzi = ui.date_input('Data udzielenia odpowiedzi',
+                                        value=(w.data_odpowiedzi or date.today()).isoformat())
+        ui.button('Oznacz jako wysłane', icon='mark_email_read', color='positive', on_click=oznacz_wyslane)
     return stan_anonimizacji.refresh
+
+
+# --- status, edycja, kwerenda, usuwanie --------------------------------------------------
+
+IKONY_STATUSOW = {'brak': 'radio_button_unchecked', 'wydzialy': 'forward_to_inbox', 'przygotowana': 'edit_document',
+                  'wyslana': 'mark_email_read'}
+
+
+def _przycisk_statusu(w: Wniosek, po_zmianie: Callable[[], None]) -> None:
+    """Status jako przycisk z menu – urzędnik może go zmienić ręcznie (także cofnąć)."""
+
+    async def zmien(kod: str) -> None:
+        data = None
+        if kod == 'wyslana':
+            data = await _zapytaj_o_date('Kiedy wysłano odpowiedź?', w.data_odpowiedzi or date.today())
+            if data is None:
+                return
+        if rejestr.zmien_status(w, kod, data_odpowiedzi=data, powod='zmiana ręczna'):
+            ui.notify(f'Status sprawy: {w.status_opis}.', type='positive')
+            po_zmianie()
+
+    with ui.button(w.status_opis, icon=IKONY_STATUSOW[w.status]) \
+            .props(f'unelevated no-caps color={KOLOR_STATUSU[w.status]}').tooltip('Zmień status'):
+        with ui.menu():
+            for kod, opis in rejestr.STATUSY.items():
+                with ui.item(on_click=lambda k=kod: zmien(k)):
+                    with ui.item_section().props('avatar'):
+                        ui.icon('check' if kod == w.status else IKONY_STATUSOW[kod],
+                                color='primary' if kod == w.status else 'grey-7')
+                    with ui.item_section():
+                        ui.item_label(opis)
+
+
+async def _zapytaj_o_date(pytanie: str, domyslna: date) -> date | None:
+    with ui.dialog() as dialog, ui.card():
+        ui.label(pytanie).classes('text-subtitle1')
+        pole = ui.date_input('Data', value=domyslna.isoformat())
+        with ui.row().classes('w-full justify-end'):
+            ui.button('Anuluj', on_click=lambda: dialog.submit(None)).props('flat')
+            ui.button('Zapisz', on_click=lambda: dialog.submit(pole.value))
+    wynik = await dialog
+    dialog.delete()
+    try:
+        data = date.fromisoformat(wynik) if wynik else None
+    except ValueError:
+        data = None
+    if data and data > date.today():
+        ui.notify('Data nie może być z przyszłości.', type='warning')
+        return None
+    return data
+
+
+def _menu_sprawy(w: Wniosek, stan: dict, katalog: Path, po_zmianie: Callable[[], None]) -> None:
+    async def edytuj() -> None:
+        with ui.dialog() as dialog, ui.card().classes('w-[34rem]'):
+            ui.label(f'Dane wniosku {w.nr}').classes('text-h6')
+            temat = ui.textarea('Skrócony opis tematu', value=w.temat).classes('w-full').props('autogrow')
+            with ui.grid(columns=2).classes('w-full gap-x-4'):
+                wnioskodawca = ui.input('Wnioskodawca', value=w.wnioskodawca)
+                kontakt = ui.input('E-mail / adres do odpowiedzi', value=w.kontakt)
+                data_wplywu = ui.date_input('Data wpływu', value=w.data_wplywu.isoformat())
+                kto = ui.input('Inicjały prowadzącego', value=w.kto)
+            ui.label('Numeru wniosku nie można zmienić – od niego zależy folder z dokumentami sprawy.') \
+                .classes('text-caption text-grey-7')
+            with ui.row().classes('w-full justify-end'):
+                ui.button('Anuluj', on_click=lambda: dialog.submit(False)).props('flat')
+                ui.button('Zapisz', icon='save', on_click=lambda: dialog.submit(True))
+        zapisz = await dialog
+        if zapisz:
+            try:
+                rejestr.aktualizuj(w, temat=temat.value, wnioskodawca=wnioskodawca.value, kontakt=kontakt.value,
+                                   data_wplywu=date.fromisoformat(data_wplywu.value), kto=kto.value)
+            except ValueError as blad:
+                ui.notify(str(blad), type='warning')
+            else:
+                ui.notify('Zapisano dane wniosku.', type='positive')
+                po_zmianie()
+        dialog.delete()
+
+    async def kwerenda() -> None:
+        with ui.dialog() as dialog, ui.card().classes('w-[30rem]'):
+            ui.label('Kwerenda – przedłużenie terminu').classes('text-h6')
+            ui.label('Gdy odpowiedź wymaga więcej czasu, termin można wydłużyć najwyżej do 2 miesięcy od złożenia '
+                     'wniosku. Wnioskodawcę trzeba o tym zawiadomić (Urzęduś przygotuje zawiadomienie).') \
+                .classes('text-caption text-grey-8')
+            wlaczona = ui.switch('Kwerenda', value=w.kwerenda)
+            nowy_termin = ui.date_input('Nowy termin', value=w.termin.isoformat() if w.kwerenda
+                                        else w.termin_maksymalny_kwerendy.isoformat()) \
+                .bind_enabled_from(wlaczona, 'value')
+            ui.label(f'Dopuszczalnie: od {w.termin_podstawowy + timedelta(days=1):%d.%m.%Y} '
+                     f'do {w.termin_maksymalny_kwerendy:%d.%m.%Y}.').classes('text-caption text-grey-7')
+            with ui.row().classes('w-full justify-end'):
+                ui.button('Anuluj', on_click=lambda: dialog.submit(False)).props('flat')
+                ui.button('Zapisz', icon='save', on_click=lambda: dialog.submit(True))
+        zapisz = await dialog
+        if zapisz:
+            try:
+                rejestr.ustaw_kwerende(w, wlaczona.value,
+                                       date.fromisoformat(nowy_termin.value) if wlaczona.value else None)
+            except ValueError as blad:
+                ui.notify(str(blad), type='warning', multi_line=True)
+            else:
+                ui.notify(f'Termin odpowiedzi: {w.termin:%d.%m.%Y}.', type='positive')
+                po_zmianie()
+        dialog.delete()
+
+    async def usun() -> None:
+        liczba = sum(1 for p in katalog.rglob('*') if p.is_file()) if katalog.exists() else 0
+        pytanie = (f'Usunąć wniosek {w.nr} „{w.temat}”?' +
+                   (f' Trwale usunięte zostaną też dokumenty sprawy ({odmiana(liczba, "plik", "pliki", "plików")}).'
+                    if liczba else '') + ' Tej operacji nie można cofnąć.')
+        if not await potwierdz(pytanie, 'Usuń wniosek'):
+            return
+        stan['usunieta'] = True
+        rejestr.usun(w)
+        await run.io_bound(shutil.rmtree, katalog, True)
+        ui.notify(f'Usunięto wniosek {w.nr}.', type='positive')
+        ui.navigate.to('/')
+
+    with ui.button(icon='more_vert').props('flat round').tooltip('Więcej'):
+        with ui.menu():
+            ui.menu_item('Edytuj dane wniosku', on_click=edytuj)
+            ui.menu_item('Kwerenda – przedłuż termin', on_click=kwerenda)
+            ui.separator()
+            ui.menu_item('Usuń wniosek', on_click=usun).classes('text-negative')
 
 
 # --- strona ----------------------------------------------------------------------
@@ -580,21 +747,51 @@ def strona_sprawa(id: str) -> None:
     zapisano = zapisany.pop('zapisano', None)
     stan.update(zapisany)
 
-    with ui.row().classes('w-full items-center justify-between'):
-        with ui.row().classes('items-center'):
-            ui.button(icon='arrow_back', on_click=lambda: ui.navigate.to('/')).props('flat round')
-            naglowek_strony(f'{w.nr} – {w.temat}', f'Termin: {w.termin:%d.%m.%Y} ({w.pozostalo})')
-        with ui.row().classes('items-center gap-3'):
-            with ui.row().classes('items-center gap-1 text-caption text-grey-7'):
+    odswiezacze: dict[str, Callable[[], None]] = {}
+
+    def po_zmianie_sprawy() -> None:
+        """Status, termin albo dane wniosku się zmieniły – odświeżamy nagłówek i przebieg sprawy."""
+        naglowek_sprawy.refresh()
+        akcje_sprawy.refresh()
+        if 'Wniosek' in odswiezacze:
+            odswiezacze['Wniosek']()
+
+    with ui.row().classes('w-full items-center justify-between no-wrap'):
+        @ui.refreshable
+        def naglowek_sprawy() -> None:
+            with ui.row().classes('items-center no-wrap'):
+                ui.button(icon='arrow_back', on_click=lambda: ui.navigate.to('/')).props('flat round')
+                with ui.column().classes('gap-0'):
+                    ui.label(f'{w.nr} – {w.temat}').classes('text-h5 text-weight-medium')
+                    with ui.row().classes('items-center gap-2 text-grey-7'):
+                        ui.label(f'Termin: {w.termin:%d.%m.%Y} ({w.pozostalo})')
+                        if w.uwaga_o_terminie:
+                            ui.icon('info_outline', size='xs').tooltip(w.uwaga_o_terminie)
+                        if w.kwerenda:
+                            ui.badge(f'kwerenda +{w.dni_kwerendy} dni', color='purple-1', text_color='purple-9')
+                        ui.label(f'· prowadzi {w.kto}')
+
+        naglowek_sprawy()
+        with ui.row().classes('items-center gap-3 no-wrap'):
+            with ui.row().classes('items-center gap-1 text-caption text-grey-7 no-wrap'):
                 ui.icon('cloud_done' if zapisano else 'save', size='xs')
                 info_zapisu = ui.label(f'Wczytano zapisaną pracę z {zapisano:%d.%m %H:%M}' if zapisano
                                        else 'Zmiany zapisują się automatycznie')
-            ui.badge(w.status_opis, color=KOLOR_STATUSU[w.status]).classes('text-body2 q-pa-sm')
+
+            @ui.refreshable
+            def akcje_sprawy() -> None:
+                with ui.row().classes('items-center gap-1 no-wrap'):
+                    _przycisk_statusu(w, po_zmianie_sprawy)
+                    _menu_sprawy(w, stan, katalog, po_zmianie_sprawy)
+
+            akcje_sprawy()
 
     # Autozapis: co 2 s porównujemy stan z ostatnio zapisanym – zapisujemy tylko, gdy coś się zmieniło.
     ostatni_zapis = {'json': stan_sprawy.serializuj(stan)}
 
     def autozapis() -> None:
+        if stan.get('usunieta'):  # po usunięciu wniosku nie odtwarzamy jego katalogu
+            return
         aktualny = stan_sprawy.serializuj(stan)
         if aktualny == ostatni_zapis['json']:
             return
@@ -614,12 +811,11 @@ def strona_sprawa(id: str) -> None:
         ('Wniosek', 'description', lambda: _krok_wniosek(w)),
         ('Podobne sprawy', 'manage_search', _krok_podobne),
         ('Wydziały', 'account_tree', lambda: _krok_wydzialy(w)),
-        ('Odpowiedzi wydziałów', 'upload_file', lambda: _krok_odpowiedzi(w)),
+        ('Odpowiedzi wydziałów', 'upload_file', lambda: _krok_odpowiedzi(w, po_zmianie_sprawy)),
         ('Projekt odpowiedzi', 'edit_note', lambda: _krok_projekt(w, stan)),
         ('Anonimizacja', 'visibility_off', lambda: _krok_anonimizacja(stan)),
-        ('Eksport', 'download', lambda: _krok_eksport(w, stan)),
+        ('Eksport', 'download', lambda: _krok_eksport(w, stan, po_zmianie_sprawy)),
     ]
-    odswiezacze: dict[str, Callable[[], None]] = {}
     with ui.stepper().props('header-nav alternative-labels flat bordered').classes('w-full') as stepper:
         for i, (nazwa, ikona, budowniczy) in enumerate(kroki):
             with ui.step(nazwa, icon=ikona):

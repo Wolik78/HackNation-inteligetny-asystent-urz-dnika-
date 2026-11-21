@@ -1,12 +1,11 @@
 """Rejestracja nowego wniosku: wgranie pliku, analiza przez Bielika, sprawdzenie danych, zatwierdzenie."""
 
-from datetime import date, timedelta
+from datetime import date
 
 from nicegui import run, ui
 
 from ... import rejestr
 from ...ai import AnalizaWniosku, BladAI
-from ...konfiguracja import TERMIN_DNI, TERMIN_KWERENDA
 from ...pliki import Kategoria, ZapisanyPlik
 from ...uslugi import bielik, magazyn
 from ..komponenty import (WgranePliki, blad_ai, karta_pliku, naglowek_strony, strefa_wgrywania, wskaznik_postepu,
@@ -92,6 +91,7 @@ def strona_nowy_wniosek() -> None:
                 kontakt = ui.input('E-mail / adres do odpowiedzi')
                 kto = ui.input('Inicjały prowadzącego', value='AK')
                 termin = ui.input('Termin odpowiedzi').props('readonly')
+            uwaga_terminu = ui.label().classes('text-caption text-grey-7')
             temat = ui.textarea('Skrócony opis tematu', validation=WYMAGANE).classes('w-full').props('autogrow')
             kwerenda = ui.checkbox('Kwerenda (przedłużenie terminu do 2 miesięcy)')
 
@@ -124,8 +124,9 @@ def strona_nowy_wniosek() -> None:
         except (TypeError, ValueError):
             termin.value = ''
             return
-        termin.value = (wplyw + timedelta(days=TERMIN_KWERENDA if kwerenda.value else TERMIN_DNI)) \
-            .strftime('%d.%m.%Y')
+        koniec, uwaga = rejestr.oblicz_termin(wplyw, kwerenda.value)
+        termin.value = koniec.strftime('%d.%m.%Y')
+        uwaga_terminu.set_text(uwaga)
 
     data_wplywu.on_value_change(przelicz_termin)
     kwerenda.on_value_change(przelicz_termin)

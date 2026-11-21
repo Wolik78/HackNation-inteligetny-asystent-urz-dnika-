@@ -1,7 +1,12 @@
 """Wspólne fikstury: generują przykładowe dokumenty w locie, bez prawdziwych danych osobowych."""
 
 import io
+import os
+import tempfile
 from pathlib import Path
+
+# Testy nigdy nie piszą do prawdziwego folderu danych – ustawiamy go, zanim cokolwiek zaimportuje `asystent`.
+os.environ['UDIP_KATALOG_DANYCH'] = tempfile.mkdtemp(prefix='udip_testy_')
 
 import docx
 import pytest

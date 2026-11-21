@@ -19,7 +19,8 @@ folder repozytorium (nie folder nad nim) albo wybierz interpreter ręcznie:
 GUI.py                    punkt startowy
 asystent/
   konfiguracja.py         ścieżki, limity, terminy
-  rejestr.py              lista wniosków (10 testowych + dodane przez urzędnika)
+  rejestr.py              kalendarz wniosków: terminy, statusy, kwerenda, historia (zapis w JSON)
+  terminy.py              dni robocze, święta, liczenie terminów wg art. 57 KPA
   uslugi.py               wspólne instancje (magazyn plików, klient Bielika)
   anonimizacja.py         wzorce danych osobowych, podział tekstu, maskowanie
   kontrola.py             kontrola jakości pisma bez AI (liczby, daty, forma)

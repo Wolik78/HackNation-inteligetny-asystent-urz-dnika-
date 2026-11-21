@@ -32,9 +32,10 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
   - [ ] usunąć dane przykładowe z `archiwum.py` i `sprawa.py`
 - [x] **Zapisywanie stanu sprawy** – autozapis co 2 s i przy wyjściu ze sprawy (`stan.json` w katalogu sprawy)
   - [x] projekt, zatwierdzone fragmenty do ukrycia i wynik kontroli zapisywane w katalogu sprawy
-- [ ] **Statusy spraw zmieniane na każdym kroku** (I11, J5) – dziś status ustawia się tylko przy dodaniu wniosku
-  - [ ] brak działań → zapytania do wydziałów (po skopiowaniu prośby / wgraniu odpowiedzi) → odpowiedź przygotowana (po eksporcie) → wysłana
-  - [ ] kwerenda + liczba dni (I11c), przycisk „Oznacz jako wysłane” z datą udzielenia odpowiedzi (dziś TODO)
+- [x] **Statusy spraw zmieniane na każdym kroku** (I11, J5)
+  - [x] brak działań → zapytania do wydziałów (po wgraniu odpowiedzi) → odpowiedź przygotowana (po zapisaniu pisma) → wysłana; ręczna zmiana z menu statusu
+  - [x] kwerenda + liczba dni (I11c), „Oznacz jako wysłane” z datą udzielenia odpowiedzi, przebieg sprawy (historia)
+  - [ ] status „zapytania wysłane” po skopiowaniu prośby w kroku Wydziały – 👤 do uzgodnienia z kolegą
 - [ ] **Anonimizacja dowolnego pliku** (**J3**: jury wgra plik z danymi osobowymi i sprawdzi, czy je ukrywamy)
   - [ ] osobne narzędzie: wgraj PDF/DOCX → zaznacz dane → zatwierdź → pobierz zanonimizowany DOCX
   - [ ] wykrywanie imion i nazwisk bez AI (słownik polskich imion + wzorce), adresów, kodów pocztowych, dat urodzenia, NIP/REGON osób fizycznych
@@ -44,11 +45,12 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 
 ## 2. Kalendarz wniosków
 
-- [ ] P1 Wybór roku faktycznie filtruje listę (dziś pole nic nie robi) (Z3)
-- [ ] P1 Widok miesiąca – siatka z wnioskami na dniach terminu (dziś placeholder) (Z3)
-- [ ] P1 Edycja danych wniosku i usuwanie wniosku (z potwierdzeniem)
-- [ ] P1 Przesuwanie terminu z soboty/niedzieli/święta na następny dzień roboczy (art. 57 § 4 KPA)
-- [ ] P2 Wyszukiwarka i filtry: pilne / w toku / wysłane / moje (inicjały)
+- [x] P1 Wybór roku faktycznie filtruje listę (Z3)
+- [x] P1 Widok miesiąca – siatka z wnioskami na dniach terminu, weekendy i święta wyszarzone (Z3)
+- [x] P1 Edycja danych wniosku i usuwanie wniosku (z potwierdzeniem, razem z dokumentami)
+- [x] P1 Przesuwanie terminu z soboty/niedzieli/święta na następny dzień roboczy (art. 57 § 4 KPA), kwerenda w miesiącach (§ 3)
+- [x] P2 Wyszukiwarka i filtry: pilne / w toku / kwerendy / wysłane / prowadzący; klikalne kafelki
+- [x] P2 Wnioski testowe zapisywane trwale + „Przywróć wnioski testowe” w Ustawieniach (przed pokazem)
 - [ ] P2 Rejestr w SQLite zamiast JSON (skalowanie na setki spraw)
 
 ## 3. AI i automatyzacja
