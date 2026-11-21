@@ -23,8 +23,10 @@ asystent/
   konfiguracja.py         ścieżki, limity, terminy
   rejestr.py              kalendarz wniosków: terminy, statusy, kwerenda, historia (zapis w JSON)
   terminy.py              dni robocze, święta, liczenie terminów wg art. 57 KPA
-  uslugi.py               wspólne instancje (magazyn plików, klient Bielika)
-  anonimizacja.py         wzorce danych osobowych, podział tekstu, maskowanie
+  uslugi.py               wspólne instancje (magazyn plików, klient Bielika, archiwum)
+  archiwum.py             wyszukiwanie podobnych spraw: słowa (TF-IDF) + znaczenie (embeddingi), indeks wektorów
+  klasyfikacja.py         rodzaj sprawy i ścieżka postępowania (zwykła, przetworzona, w BIP, …)
+  anonimizacja.py         dane osobowe bez AI (imiona i nazwiska, adresy, PESEL…), podział tekstu, maskowanie
   kontrola.py             kontrola jakości pisma bez AI (liczby, daty, forma)
   stan_sprawy.py          autozapis pracy w sprawie (stan.json w katalogu sprawy)
   ai/
@@ -35,7 +37,9 @@ asystent/
     prompty_czatu.py      prompty i ściąga z ustawy dla Urzędusia
   pliki/                  obsługa plików – bez zależności od GUI
     walidacja.py          typ, rozmiar, sygnatura pliku, bezpieczna nazwa
-    ekstrakcja.py         tekst z PDF / DOCX / DOC / TXT
+    ekstrakcja.py         tekst z PDF / DOCX / DOC / TXT / zdjęć (OCR)
+    ocr.py                OCR Windows (polski, offline), położenie słów do zaczerniania
+    anonimizacja_pliku.py zanonimizowany plik w tym samym formacie (czarne pola) + kontrola wyniku
     magazyn.py            lokalne przechowywanie dokumentów + metadane
     eksport.py            zapis pisma do .docx / .txt
   gui/
@@ -56,12 +60,48 @@ Aplikacja korzysta z modelu **Bielik 4.5B v3.0 Instruct** uruchomionego w **LM S
 2. Uruchom aplikację – w nagłówku pojawi się zielone „Bielik lokalnie · offline”.
 
 Co robi Bielik:
-- **Nowy wniosek** – po wgraniu pliku sam proponuje skrócony opis, wydziały i ocenę, czy potrzebna jest kwerenda.
+- **Nowy wniosek** – po wgraniu pliku sam proponuje skrócony opis, wydziały, rodzaj sprawy i ocenę, czy potrzebna
+  jest kwerenda.
 - **Sprawa → Wydziały** – propozycja wydziałów z uzasadnieniem; listę można poprawić ręcznie (wykaz z BIP).
 - **Sprawa → Projekt odpowiedzi** – pisze projekt pisma na żywo (stream) na podstawie wniosku, odpowiedzi
   wydziałów i opcjonalnego wzoru z archiwum.
 - **Sprawa → Anonimizacja** – wskazuje dane osób prywatnych (bez urzędników pełniących funkcje publiczne);
   dodatkowo PESEL, telefony, e-maile i numery kont wykrywane są wzorcami. Urzędnik zatwierdza, eksport je maskuje.
+
+### Podobne sprawy (Archiwum)
+
+Krok „Podobne sprawy” szuka sam po otwarciu sprawy, ekran Archiwum – po wpisaniu tematu. Przeszukiwane są archiwalne
+odpowiedzi z Bazy wiedzy i wnioski z rejestru z ostatniego roku. Trafność (%) łączy:
+- **wspólne słowa** – rdzenie słów ważone rzadkością (TF-IDF), bez urzędowych formułek; działa bez LM Studio,
+- **znaczenie** – embeddingi z LM Studio (`UDIP_EMBED_MODEL`, domyślnie wbudowany nomic-embed). Nomic słabo zna
+  polski, więc ma wagę 25%; model wielojęzyczny (np. **bge-m3**) dostaje 50% i wyraźnie poprawia wyniki.
+Wektory dokumentów liczą się raz (`dane/indeks_archiwum.json`, także w tle po wgraniu archiwum do Bazy wiedzy).
+Najlepsza archiwalna odpowiedź (od 40%) trafia automatycznie jako wzór do „Projektu odpowiedzi”.
+Archiwum testowe (11 fikcyjnych, zanonimizowanych odpowiedzi): `dane_testowe/archiwum/` – wgraj je w Bazie wiedzy.
+
+### Rodzaj sprawy (klasyfikacja)
+
+Bielik przy analizie wniosku wskazuje rodzaj z zamkniętej listy; gdy odpowie „zwykła”, a reguły wyraźnie widzą
+inny rodzaj (np. „w mojej sprawie”, „wszystkich umów z lat…”), wygrywają reguły. Urzędnik zatwierdza (krok 1 sprawy).
+
+| Rodzaj | Ścieżka | Pismo z „Generuj projekt” |
+|---|---|---|
+| Informacja publiczna | odpowiedź w 14 dni (art. 13) | odpowiedź z danymi od wydziałów |
+| Informacja przetworzona | art. 3 ust. 1 pkt 1, ew. decyzja (art. 16) | wezwanie do wykazania szczególnie istotnego interesu publicznego |
+| Informacja w BIP | art. 10 ust. 1 | pismo wskazujące BIP |
+| To nie jest informacja publiczna | zwykłe pismo, bez decyzji | pismo informujące |
+| Inny tryb dostępu | art. 1 ust. 2 (np. akta – KPA) | pismo o właściwym trybie |
+| Do doprecyzowania | termin biegnie od doprecyzowania | wezwanie do doprecyzowania |
+
+### Anonimizacja pliku (J3)
+
+Ekran **Anonimizacja pliku**: przeciągnij PDF (także skan), Word, TXT albo zdjęcie → dane osobowe zaznaczają się od razu
+bez AI (imiona i nazwiska w odmianie, adresy, kody pocztowe, PESEL, telefony, e-maile, NIP, REGON, daty urodzenia),
+Bielik dokłada resztę → urzędnik zatwierdza → **plik w tym samym formacie z czarnymi polami**:
+- PDF z tekstem – redakcja PyMuPDF (tekst pod polem jest usuwany z pliku, metadane czyszczone),
+- skan PDF i zdjęcie – czarne prostokąty w miejscach słów wskazanych przez OCR (zdjęcie zapisywane jako PNG bez EXIF),
+- Word – maska w akapitach, tabelach, nagłówkach i stopkach; TXT – maska.
+Na koniec plik wynikowy jest odczytywany ponownie (także OCR-em) i aplikacja potwierdza, że ukrytych danych w nim nie ma.
 
 ### Dobór wydziałów (lista z BIP)
 

@@ -12,15 +12,19 @@ def _cytat(tekst: str) -> str:
     return f'"""\n{tekst.strip()}\n"""'
 
 
-def analiza_wniosku(tekst: str) -> list[dict]:
+def analiza_wniosku(tekst: str, rodzaje: dict[str, str] | None = None) -> list[dict]:
     # Wydziałów tu nie ma – dobiera je asystent/ai/wydzialy.py (lista z BIP). Krótszy prompt = szybsza odpowiedź.
+    rodzaje = rodzaje or {}
     system = (
         f'{SYSTEM_URZEDNIK} Analizujesz wniosek. {FORMAT_TYLKO_JSON} Format:\n'
-        '{"skrocony_opis": "...", "czy_wymaga_kwerendy": false}\n'
+        '{"skrocony_opis": "...", "czy_wymaga_kwerendy": false, "rodzaj": "zwykla", "uzasadnienie_rodzaju": "..."}\n'
         'Zasady:\n'
         '- skrocony_opis: jedno zdanie (do 15 słów), czego dotyczy wniosek, bez danych osobowych wnioskodawcy;\n'
         '- czy_wymaga_kwerendy: true tylko wtedy, gdy przygotowanie informacji wymaga przeszukania dużej liczby '
-        'dokumentów lub danych z wielu lat (przedłużenie terminu do 2 miesięcy, art. 13 ust. 2).'
+        'dokumentów lub danych z wielu lat (przedłużenie terminu do 2 miesięcy, art. 13 ust. 2);\n'
+        '- rodzaj: dokładnie jeden klucz z listy (w razie wątpliwości „zwykla”):\n'
+        + ''.join(f'  {klucz} – {opis};\n' for klucz, opis in rodzaje.items()) +
+        '- uzasadnienie_rodzaju: jedno krótkie zdanie, dlaczego ten rodzaj.'
     )
     return [
         {'role': 'system', 'content': system},
@@ -84,3 +88,51 @@ def projekt_odpowiedzi(wniosek: str, informacje_wydzialow: str, wzor: str | None
         {'role': 'system', 'content': system},
         {'role': 'user', 'content': tresc},
     ]
+
+
+# Pisma dla spraw, które nie kończą się zwykłym udostępnieniem informacji (klucze jak w asystent/klasyfikacja.py).
+PISMA_WG_RODZAJU = {
+    'przetworzona': (
+        'wezwanie do wykazania szczególnie istotnego interesu publicznego',
+        'Wyjaśnij, że żądana informacja ma charakter informacji przetworzonej, bo jej przygotowanie wymaga '
+        '[dopasuj do wniosku: zestawienia / analizy / zsumowania danych]. Powołaj art. 3 ust. 1 pkt 1 ustawy o dostępie '
+        'do informacji publicznej i wezwij do wykazania, w terminie 14 dni od otrzymania pisma, szczególnie istotnego '
+        'interesu publicznego. Uprzedź, że brak odpowiedzi spowoduje wydanie decyzji o odmowie (art. 16).',
+    ),
+    'w_bip': (
+        'pismo wskazujące, gdzie w Biuletynie Informacji Publicznej jest żądana informacja',
+        'Wyjaśnij, że informacja została udostępniona w Biuletynie Informacji Publicznej Urzędu Miasta Bydgoszczy, '
+        'wskaż miejsce jej publikacji jako [UZUPEŁNIĆ: adres strony BIP] i powołaj art. 10 ust. 1 ustawy o dostępie '
+        'do informacji publicznej (informacja udostępniona w BIP nie podlega udostępnieniu na wniosek).',
+    ),
+    'nie_publiczna': (
+        'pismo informujące, że żądanie nie dotyczy informacji publicznej',
+        'Wyjaśnij uprzejmie, że żądanie nie dotyczy informacji publicznej w rozumieniu art. 1 ust. 1 ustawy '
+        'o dostępie do informacji publicznej (dopasuj powód do wniosku: sprawa indywidualna, prośba o poradę, '
+        'opinię lub interpretację). Jeśli to możliwe, wskaż, gdzie wnioskodawca może załatwić sprawę. '
+        'To zwykłe pismo, nie decyzja.',
+    ),
+    'inny_tryb': (
+        'pismo informujące o właściwym trybie dostępu do informacji',
+        'Wyjaśnij, że dostęp do żądanej informacji regulują przepisy szczególne (art. 1 ust. 2 ustawy o dostępie do '
+        'informacji publicznej) i wskaż właściwy tryb, np. wgląd w akta sprawy na podstawie art. 73 Kodeksu '
+        'postępowania administracyjnego – dopasuj do treści wniosku, a gdy nie masz pewności, wstaw [UZUPEŁNIĆ].',
+    ),
+    'doprecyzowanie': (
+        'wezwanie do doprecyzowania wniosku',
+        'Wskaż konkretnie, które elementy wniosku są niejasne lub zbyt ogólne (np. okres, zakres dokumentów) '
+        'i poproś o ich uściślenie. Poinformuj, że termin na udostępnienie informacji biegnie od dnia doprecyzowania.',
+    ),
+}
+
+
+def pismo_wg_rodzaju(rodzaj: str, wniosek: str, dane_sprawy: str) -> list[dict]:
+    rodzaj_pisma, instrukcja = PISMA_WG_RODZAJU[rodzaj]
+    system = (
+        f'{SYSTEM_URZEDNIK} Piszesz {rodzaj_pisma}. {instrukcja}\n'
+        'Zasady: formalna polszczyzna urzędowa, zwrot grzecznościowy na początku, formuła „Z poważaniem” na końcu; '
+        'powołuj przepisy bez publikatora (Dz.U.); brakujące dane oznacz [UZUPEŁNIĆ: ...]; nie wymyślaj faktów; '
+        'zwykły tekst bez Markdown; zwróć wyłącznie treść pisma.'
+    )
+    tresc = f'DANE SPRAWY:\n{_cytat(dane_sprawy)}\n\nWNIOSEK:\n{_cytat(wniosek)}'
+    return [{'role': 'system', 'content': system}, {'role': 'user', 'content': tresc}]

@@ -19,3 +19,6 @@ LLM_URL = os.environ.get('UDIP_LLM_URL', 'http://localhost:1235/v1')
 LLM_MODEL = os.environ.get('UDIP_LLM_MODEL', 'bielik-4.5b-v3.0-instruct')
 LLM_LIMIT_ZNAKOW = int(os.environ.get('UDIP_LLM_LIMIT_ZNAKOW', 6000))  # tekstu w jednym zapytaniu
 LLM_TEMPERATURA = 0.1
+# Model embeddingów do wyszukiwania podobnych spraw (Archiwum). Wbudowany w LM Studio nomic-embed słabo zna polski,
+# dlatego wyszukiwanie opiera się głównie na słowach; lepszy wielojęzyczny model, np. bge-m3, podnosi wagę znaczenia.
+EMBED_MODEL = os.environ.get('UDIP_EMBED_MODEL', 'text-embedding-nomic-embed-text-v1.5')

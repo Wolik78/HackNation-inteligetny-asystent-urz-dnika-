@@ -7,7 +7,7 @@ from nicegui import app, ui
 from ..uslugi import bielik
 from .czat import panel_czatu
 from .kontekst import biezacy
-from .strony import (strona_archiwum, strona_baza_wiedzy, strona_nowy_wniosek, strona_sprawa,
+from .strony import (strona_anonimizacja, strona_archiwum, strona_baza_wiedzy, strona_nowy_wniosek, strona_sprawa,
                      strona_ustawienia, strona_wnioski)
 
 TYTUL = 'Asystent UDIP – UM Bydgoszcz'
@@ -16,6 +16,7 @@ MENU = [
     ('Wnioski', 'event_note', '/'),
     ('Nowy wniosek', 'note_add', '/nowy'),
     ('Archiwum', 'inventory_2', '/archiwum'),
+    ('Anonimizacja pliku', 'visibility_off', '/anonimizacja'),
     ('Baza wiedzy', 'menu_book', '/baza'),
     ('Ustawienia', 'settings', '/ustawienia'),
 ]
@@ -92,6 +93,7 @@ def root() -> None:
             '/nowy': _bez_sprawy(strona_nowy_wniosek),
             '/sprawa/{id}': strona_sprawa,  # sama ustawia kontekst sprawy dla Urzędusia
             '/archiwum': _bez_sprawy(strona_archiwum),
+            '/anonimizacja': _bez_sprawy(strona_anonimizacja),
             '/baza': _bez_sprawy(strona_baza_wiedzy),
             '/ustawienia': _bez_sprawy(strona_ustawienia),
         })

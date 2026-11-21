@@ -38,3 +38,30 @@ def test_maskowanie_wszystkich_wystapien():
     wynik = zamaskuj('Jan Kowalski pisze. Pan Jan Kowalski prosi.', ['Jan Kowalski'])
     assert wynik == f'{MASKA} pisze. Pan {MASKA} prosi.'
     assert zamaskuj('bez zmian', []) == 'bez zmian'
+
+
+# --- wykrywanie bez AI: osoby, adresy, daty urodzenia, NIP (J3 działa także bez LM Studio) ---
+
+PISMO = ('Szanowna Pani Anno Nowak, w odpowiedzi na pismo Pana Kowalskiego informuję, że Janowi Wiśniewskiemu '
+         '(ur. 12.05.1980 r., zam. ul. Jana Pawła II 12/4 m. 5, 85-001 Bydgoszcz, NIP 123-456-78-90) przyznano '
+         'zasiłek. Pismo podpisał Pan Prezydent. Wydatki wyniosły 1 240 000 zł. Sprawę prowadzi Marek Zieliński.')
+
+
+def test_imiona_i_nazwiska_w_odmianie():
+    wynik = wykryj_wzorce(PISMO)
+    for osoba in ('Anno Nowak', 'Janowi Wiśniewskiemu', 'Marek Zieliński', 'Kowalskiego'):
+        assert wynik.get(osoba) == 'Imię i nazwisko', osoba
+
+
+def test_adres_kod_data_urodzenia_nip():
+    wynik = wykryj_wzorce(PISMO)
+    assert wynik.get('ul. Jana Pawła II 12/4 m. 5') == 'Adres'
+    assert wynik.get('85-001 Bydgoszcz') == 'Kod pocztowy i miejscowość'
+    assert wynik.get('ur. 12.05.1980 r.') == 'Data urodzenia'
+    assert wynik.get('NIP 123-456-78-90') == 'NIP'
+
+
+def test_funkcje_i_kwoty_nie_sa_osobami():
+    wynik = wykryj_wzorce(PISMO)
+    assert 'Prezydent' not in wynik and 'Jana Pawła' not in wynik   # funkcja; patron ulicy w adresie
+    assert not any('1 240 000' in ciag for ciag in wynik)

@@ -4,7 +4,7 @@ from datetime import date
 
 from nicegui import run, ui
 
-from ... import rejestr
+from ... import klasyfikacja, rejestr
 from ...ai import AnalizaWniosku, BladAI, WynikDoboru
 from ...ai.wydzialy import dobierz
 from ...pliki import Kategoria, ZapisanyPlik
@@ -16,7 +16,7 @@ WYMAGANE = {'Pole wymagane': lambda v: bool(v and str(v).strip())}
 
 
 def strona_nowy_wniosek() -> None:
-    stan: dict = {'plik': None, 'analiza': None, 'wydzialy': None}
+    stan: dict = {'plik': None, 'analiza': None, 'wydzialy': None, 'uzasadnienie_rodzaju': ''}
 
     async def wgraj(pliki: WgranePliki) -> None:
         zapisane = await zapisz_wgrane(pliki[:1], lambda n, d: magazyn.zapisz(d, n, Kategoria.WNIOSEK))
@@ -32,6 +32,12 @@ def strona_nowy_wniosek() -> None:
         podglad.refresh()
         podpowiedz.refresh()
 
+    def zmien_rodzaj() -> None:
+        # uzasadnienie dotyczy rodzaju wskazanego przez asystenta – po zmianie przez urzędnika już nie pasuje
+        # (przy podpowiedzi asystenta uzasadnienie jest ustawiane zaraz po rodzaju)
+        stan['uzasadnienie_rodzaju'] = ''
+        podpowiedz.refresh()
+
     async def analizuj(automatycznie: bool = False) -> None:
         plik: ZapisanyPlik | None = stan['plik']
         if plik is None:
@@ -39,12 +45,14 @@ def strona_nowy_wniosek() -> None:
             return
         tekst = plik.tekst()
         if not tekst.strip():
-            ui.notify('W pliku nie ma tekstu do analizy (to może być skan).', type='warning')
+            with przycisk_ai:  # kontekst przycisku – pole wgrywania, z którego przyszło wywołanie, już zniknęło
+                ui.notify('W pliku nie ma tekstu do analizy (to może być skan).', type='warning')
             return
         aktualne = lambda: stan['plik'] is plik and not przycisk_ai.is_deleted  # noqa: E731 – plik nie zmieniony
 
-        # 1. wydziały od razu ze słów kluczowych (lista z BIP, bez modelu – ułamek sekundy)
+        # 1. od razu, bez modelu: wydziały ze słów kluczowych (lista z BIP) i rodzaj sprawy z reguł
         stan['wydzialy'] = await run.io_bound(dobierz, tekst, uzyj_llm=False)
+        rodzaj.value, stan['uzasadnienie_rodzaju'] = klasyfikacja.podpowiedz_regulami(tekst)
         podpowiedz.refresh()
 
         przycisk_ai.props('loading')
@@ -56,7 +64,9 @@ def strona_nowy_wniosek() -> None:
                 analiza = await bielik.analizuj_wniosek(tekst)
             except BladAI as blad:
                 if aktualne():
-                    blad_ai(f'Analiza AI niedostępna – uzupełnij pola ręcznie. {blad}' if automatycznie else str(blad))
+                    with przycisk_ai:
+                        blad_ai(f'Analiza AI niedostępna – uzupełnij pola ręcznie. {blad}' if automatycznie
+                                else str(blad))
                 return
             if not aktualne():
                 return
@@ -64,6 +74,8 @@ def strona_nowy_wniosek() -> None:
             if analiza.skrocony_opis and (not automatycznie or not temat.value.strip()):
                 temat.value = analiza.skrocony_opis
             kwerenda.value = analiza.czy_wymaga_kwerendy
+            rodzaj.value, stan['uzasadnienie_rodzaju'] = klasyfikacja.ustal_rodzaj(
+                tekst, analiza.rodzaj, analiza.uzasadnienie_rodzaju)
             podpowiedz.refresh()
 
             # 3. Bielik wybiera wydziały spośród najlepszych kandydatów z rankingu
@@ -77,7 +89,8 @@ def strona_nowy_wniosek() -> None:
             if not przycisk_ai.is_deleted:
                 przycisk_ai.props(remove='loading')
                 postep.set_visibility(False)
-        ui.notify('Bielik uzupełnił pola – sprawdź je przed zatwierdzeniem.', type='positive')
+        with przycisk_ai:
+            ui.notify('Bielik uzupełnił pola – sprawdź je przed zatwierdzeniem.', type='positive')
 
     naglowek_strony('Nowy wniosek', 'Wgraj plik – Bielik przeanalizuje wniosek. Sprawdź dane i zatwierdź.')
 
@@ -113,12 +126,22 @@ def strona_nowy_wniosek() -> None:
                 termin = ui.input('Termin odpowiedzi').props('readonly')
             uwaga_terminu = ui.label().classes('text-caption text-grey-7')
             temat = ui.textarea('Skrócony opis tematu', validation=WYMAGANE).classes('w-full').props('autogrow')
-            kwerenda = ui.checkbox('Kwerenda (przedłużenie terminu do 2 miesięcy)')
+            with ui.row().classes('w-full items-center gap-4 no-wrap'):
+                kwerenda = ui.checkbox('Kwerenda (przedłużenie terminu do 2 miesięcy)')
+                rodzaj = ui.select({k: r.nazwa for k, r in klasyfikacja.RODZAJE.items()}, value=klasyfikacja.DOMYSLNY,
+                                   label='Rodzaj sprawy', on_change=lambda: zmien_rodzaj()).classes('w-72')
 
             @ui.refreshable
             def podpowiedz() -> None:
                 analiza: AnalizaWniosku | None = stan['analiza']
                 dobor: WynikDoboru | None = stan['wydzialy']
+                wybrany = klasyfikacja.rodzaj(rodzaj.value)
+                with ui.row().classes('items-start gap-2 no-wrap'):
+                    ui.icon(wybrany.ikona, color=wybrany.kolor).classes('q-mt-xs')
+                    with ui.column().classes('gap-0'):
+                        ui.label(f'Ścieżka: {wybrany.sciezka}').classes('text-caption')
+                        if stan['uzasadnienie_rodzaju'] and rodzaj.value != klasyfikacja.DOMYSLNY:
+                            ui.label(f'Dlaczego: {stan["uzasadnienie_rodzaju"]}').classes('text-caption text-grey-7')
                 if analiza is None and dobor is None:
                     return
                 with ui.card().props('flat').classes('w-full bg-blue-1'):
@@ -170,6 +193,7 @@ def strona_nowy_wniosek() -> None:
                 data_wplywu=wplyw, kto=kto.value.strip(), kwerenda=kwerenda.value, kontakt=kontakt.value.strip(),
                 sugerowane_wydzialy=dobor.etykiety if dobor else None,
                 uzasadnienie_wydzialu=dobor.uzasadnienie if dobor else '',
+                rodzaj=rodzaj.value, uzasadnienie_rodzaju=stan['uzasadnienie_rodzaju'],
             )
         except ValueError as blad:
             ui.notify(str(blad), type='negative')

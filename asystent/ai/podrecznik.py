@@ -49,8 +49,8 @@ SEKCJE = (
                       'podobne sprawy'), (
         'Otwarta sprawa ma 7 kroków: 1. Wniosek – dane i treść wniosku; 2. Podobne sprawy z archiwum; '
         '3. Wydziały – propozycja z wykazu wydziałów w BIP (możesz ją poprawić) i gotowa prośba do skopiowania; '
-        '4. Odpowiedzi wydziałów – tu wgrywasz pliki od wydziałów; 5. Projekt odpowiedzi; 6. Anonimizacja; 7. Eksport. Między krokami przechodzisz '
-        'przyciskami „Dalej”/„Wstecz” albo klikając nazwę kroku. Praca w sprawie (projekt pisma, anonimizacja, '
+        '4. Odpowiedzi wydziałów – tu wgrywasz pliki od wydziałów; 5. Projekt odpowiedzi; 6. Anonimizacja; '
+        '7. Eksport. Między krokami przechodzisz przyciskami „Dalej”/„Wstecz” albo klikając nazwę kroku. Praca w sprawie (projekt pisma, anonimizacja, '
         'kontrola jakości) zapisuje się automatycznie – po powrocie albo ponownym uruchomieniu aplikacji wszystko '
         'na Ciebie czeka.'
     )),
@@ -69,11 +69,27 @@ SEKCJE = (
         'czy pismo odpowiada na każde żądanie wnioskodawcy. Stan kontroli widać też w kroku „Eksport”.'
     )),
     Sekcja('Archiwum', ('archiwum', 'archiwaln', 'wyszukiw', 'szukaj', 'podobn'), (
-        'Archiwum odpowiedzi służy do wyszukiwania podobnych spraw z poprzednich lat – żeby nie pisać odpowiedzi '
-        'od zera, tylko skorzystać z tego, co urząd już kiedyś odpowiedział. Archiwalne odpowiedzi dodajesz w Bazie '
-        'wiedzy (rodzaj „Archiwalna odpowiedź”), a w kroku „Projekt odpowiedzi” możesz wybrać jedną jako wzór. '
-        'Uwaga: w obecnej wersji wyniki wyszukiwania w Archiwum są przykładowe – wyszukiwanie po znaczeniu jest '
-        'w przygotowaniu.'
+        'Archiwum odpowiedzi służy do wyszukiwania podobnych spraw – żeby nie pisać odpowiedzi od zera, tylko '
+        'skorzystać z tego, co urząd już kiedyś odpowiedział. Szuka w archiwalnych odpowiedziach z Bazy wiedzy '
+        'i we wnioskach z rejestru z ostatniego roku, po wspólnych słowach i po znaczeniu; trafność widać w procentach. '
+        'W sprawie podobne sprawy szukają się same (krok 2), a najlepsza archiwalna odpowiedź od razu trafia jako wzór '
+        'do kroku „Projekt odpowiedzi” – możesz go zmienić. Na ekranie Archiwum wpisz temat albo fragment wniosku.'
+    )),
+    Sekcja('Rodzaj sprawy', ('rodzaj sprawy', 'rodzaj', 'klasyfik', 'sklasyfik', 'przetworzon', 'sciezk', 'bip', 'nie jest informacj',
+                             'interes publiczn', 'odmow', 'inny tryb'), (
+        'Rodzaj sprawy (krok 1 sprawy, także przy rejestracji wniosku) to klasyfikacja wniosku: zwykła informacja '
+        'publiczna, informacja przetworzona, informacja dostępna w BIP, to nie jest informacja publiczna, inny tryb '
+        'dostępu albo wniosek do doprecyzowania. Podpowiada go Bielik (a gdy nie odpowie – reguły), Ty zatwierdzasz. '
+        'Przy każdym rodzaju widać ścieżkę postępowania z podstawą prawną, a „Generuj projekt” pisze właściwe pismo – '
+        'np. przy informacji przetworzonej wezwanie do wykazania szczególnie istotnego interesu publicznego.'
+    )),
+    Sekcja('Anonimizacja pliku', ('anonimizacja pliku', 'anonimizowac plik', 'zanonimizowac plik', 'czarne pol',
+                                  'dowolny plik', 'zaczernic plik', 'pdf'), (
+        'Anonimizacja pliku (menu po lewej) działa na dowolnym dokumencie: przeciągnij PDF (także skan), Word, TXT '
+        'albo zdjęcie. Dane osobowe są zaznaczane od razu – także bez Bielika (imiona i nazwiska w odmianie, adresy, '
+        'kody pocztowe, PESEL, telefony, e-maile, NIP, daty urodzenia). Zatwierdź, co ukryć, i kliknij „Utwórz '
+        'zanonimizowany plik” – powstanie plik w tym samym formacie z czarnymi polami; dane są z niego usuwane, a nie '
+        'tylko zakrywane, i aplikacja sprawdza to, odczytując plik ponownie.'
     )),
     Sekcja('Baza wiedzy', ('baza wiedzy', 'bazie wiedzy', 'baze wiedzy', 'ustaw', 'zarzadzen', 'dokument',
                            'uczy', 'wiedz'), (
@@ -83,8 +99,9 @@ SEKCJE = (
         'i usuwać dokumenty.'
     )),
     Sekcja('Anonimizacja', ('anonimiz', 'dane osobow', 'zaczern', 'ukry', 'rodo', 'maskow'), (
-        'Anonimizacja (krok 6): kliknij „Wykryj dane osobowe” – Bielik wskaże dane osób prywatnych, a wzorce znajdą '
-        'PESEL, telefony, e-maile i numery kont. Szare pola to propozycje; kliknięcie zaczernia fragment (ukryje go), '
+        'Anonimizacja (krok 6): kliknij „Wykryj dane osobowe” – od razu, bez AI, zaznaczą się imiona i nazwiska, '
+        'adresy, PESEL, telefony, e-maile i numery kont, a Bielik dołoży to, czego wzorce nie złapały. Dowolny plik '
+        'zanonimizujesz na ekranie „Anonimizacja pliku”. Szare pola to propozycje; kliknięcie zaczernia fragment (ukryje go), '
         'ponowne kliknięcie odkrywa. Możesz zatwierdzić wszystko naraz albo dopisać własny fragment. '
         'W eksporcie zatwierdzone fragmenty zostaną zastąpione znakami ██████.'
     )),

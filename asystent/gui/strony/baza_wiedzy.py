@@ -1,12 +1,20 @@
 """Baza wiedzy: ustawy, zarządzenia i archiwalne odpowiedzi, z których korzysta asystent."""
 
-from nicegui import run, ui
+from nicegui import background_tasks, run, ui
 
+from ...ai import BladAI
 from ...pliki import KATEGORIE_BAZY_WIEDZY, Kategoria, ZapisanyPlik
-from ...uslugi import magazyn
+from ...uslugi import archiwum, magazyn
 from ..komponenty import WgranePliki, karta_pliku, naglowek_strony, odmiana, strefa_wgrywania, zapisz_wgrane
 
 MAKS_NA_LISCIE = 100
+
+
+async def _zaindeksuj_archiwum() -> None:
+    try:
+        await archiwum.zaindeksuj()
+    except BladAI:
+        pass  # LM Studio wyłączone – wektory policzą się przy pierwszym wyszukiwaniu (a do tego czasu – po słowach)
 
 
 def strona_baza_wiedzy() -> None:
@@ -17,6 +25,8 @@ def strona_baza_wiedzy() -> None:
         kat = Kategoria(kategoria.value)
         if await zapisz_wgrane(pliki, lambda n, d: magazyn.zapisz(d, n, kat)):
             lista.refresh()
+            if kat == Kategoria.ARCHIWUM:  # wektory nowych odpowiedzi liczą się w tle – wyszukiwanie będzie od razu
+                background_tasks.create(_zaindeksuj_archiwum(), name='indeks archiwum')
 
     async def usun(plik: ZapisanyPlik) -> None:
         await run.io_bound(magazyn.usun, plik)

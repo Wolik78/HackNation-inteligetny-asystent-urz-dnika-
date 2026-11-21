@@ -55,8 +55,10 @@ def test_forma_pisma():
 
 def test_nieukryte_dane_osobowe():
     pismo = DOBRE_PISMO + '\nSprawę prowadziła Anna Przykładowa, tel. 52 123 45 67.'
-    assert any('Nieukryte' in p.opis for p in sprawdz_pismo(pismo, ZRODLA).ostrzezenia)
-    assert not any('Nieukryte' in p.opis for p in sprawdz_pismo(pismo, ZRODLA, ukryte={'52 123 45 67'}).ostrzezenia)
+    ostrzezenia = [p.opis for p in sprawdz_pismo(pismo, ZRODLA).ostrzezenia if 'Nieukryte' in p.opis]
+    assert any('52 123 45 67' in o for o in ostrzezenia) and any('Anna Przykładowa' in o for o in ostrzezenia)
+    ukryte = {'52 123 45 67', 'Anna Przykładowa'}
+    assert not any('Nieukryte' in p.opis for p in sprawdz_pismo(pismo, ZRODLA, ukryte=ukryte).ostrzezenia)
 
 
 def test_dane_sprawy_sa_dozwolone():

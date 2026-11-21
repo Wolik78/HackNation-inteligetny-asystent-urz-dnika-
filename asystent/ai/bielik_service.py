@@ -14,18 +14,19 @@ from dataclasses import dataclass
 
 import httpx
 
-from ..konfiguracja import LLM_LIMIT_ZNAKOW, LLM_MODEL, LLM_TEMPERATURA, LLM_URL
+from ..konfiguracja import EMBED_MODEL, LLM_LIMIT_ZNAKOW, LLM_MODEL, LLM_TEMPERATURA, LLM_URL
 from . import prompty
 
 log = logging.getLogger(__name__)
 
 ZNAKOW_NA_TOKEN = 3.0          # zmierzone dla Bieliku: ~3,3 znaku polskiego tekstu na token (z zapasem)
 REZERWA_NA_PROMPT = 400        # tokeny na instrukcje systemowe i formatowanie
-MAX_TOKENOW_ANALIZY = 200
+MAX_TOKENOW_ANALIZY = 260
 MAX_TOKENOW_DANYCH_OSOBOWYCH = 400
 MAX_TOKENOW_PISMA = 700
 MAX_TOKENOW_KOMPLETNOSCI = 500
 CZAS_ODPOWIEDZI = 240.0        # s – mały model na GPU laptopa potrafi myśleć ponad minutę
+ROZMIAR_PACZKI_OSADZEN = 16   # tyle tekstów naraz do modelu embeddingów
 
 
 class BladAI(Exception):
@@ -37,6 +38,8 @@ class AnalizaWniosku:
     """Wynik analizy wniosku. Wydziały dobiera osobny moduł – `asystent.ai.wydzialy`."""
     skrocony_opis: str
     czy_wymaga_kwerendy: bool = False
+    rodzaj: str | None = None             # klucz z asystent.klasyfikacja.RODZAJE; None – model nie wskazał
+    uzasadnienie_rodzaju: str = ''
 
 
 @dataclass
@@ -82,13 +85,18 @@ class BielikService:
         return StatusModelu(True, opis, kontekst)
 
     async def analizuj_wniosek(self, tekst: str) -> AnalizaWniosku:
-        """Skrócony opis i ocena, czy potrzebna jest kwerenda."""
+        """Skrócony opis, ocena, czy potrzebna jest kwerenda, i rodzaj sprawy (klasyfikacja)."""
+        from ..klasyfikacja import OPISY_DLA_MODELU, rozpoznaj_klucz
+
         limit = await self._limit_znakow(MAX_TOKENOW_ANALIZY)
-        odpowiedz = await self._czat(prompty.analiza_wniosku(tekst[:limit]), max_tokens=MAX_TOKENOW_ANALIZY)
+        odpowiedz = await self._czat(prompty.analiza_wniosku(tekst[:limit], OPISY_DLA_MODELU),
+                                     max_tokens=MAX_TOKENOW_ANALIZY)
         dane = wyciagnij_json(odpowiedz)
         return AnalizaWniosku(
             skrocony_opis=str(dane.get('skrocony_opis') or '').strip(),
             czy_wymaga_kwerendy=_na_bool(dane.get('czy_wymaga_kwerendy')),
+            rodzaj=rozpoznaj_klucz(dane.get('rodzaj')),
+            uzasadnienie_rodzaju=str(dane.get('uzasadnienie_rodzaju') or '').strip(),
         )
 
     async def wykryj_dane_osobowe(self, tekst: str) -> list[str]:
@@ -138,13 +146,20 @@ class BielikService:
             raise BladAI('Bielik nie wskazał żądań z wniosku. Spróbuj ponownie.')
         return wynik
 
-    async def generuj_odpowiedz(self, *, wniosek: str, informacje_wydzialow: str,
-                                wzor: str | None = None) -> AsyncIterator[str]:
-        """Strumieniuje projekt pisma kawałek po kawałku (do wyświetlania na żywo)."""
+    async def generuj_odpowiedz(self, *, wniosek: str, informacje_wydzialow: str, wzor: str | None = None,
+                                rodzaj: str = 'zwykla', dane_sprawy: str = '') -> AsyncIterator[str]:
+        """Strumieniuje projekt pisma kawałek po kawałku (do wyświetlania na żywo).
+
+        Rodzaj sprawy (klasyfikacja) decyduje o piśmie: zwykła informacja – odpowiedź z danymi od wydziałów;
+        pozostałe – wezwanie / pismo informujące (prompty.PISMA_WG_RODZAJU).
+        """
         limit = await self._limit_znakow(MAX_TOKENOW_PISMA)
-        wniosek, informacje_wydzialow, wzor = przytnij_do_budzetu(limit, wniosek, informacje_wydzialow, wzor)
-        async for kawalek in self._strumien(prompty.projekt_odpowiedzi(wniosek, informacje_wydzialow, wzor),
-                                            max_tokens=MAX_TOKENOW_PISMA):
+        if rodzaj in prompty.PISMA_WG_RODZAJU:
+            wiadomosci = prompty.pismo_wg_rodzaju(rodzaj, wniosek[:max(1000, limit - len(dane_sprawy))], dane_sprawy)
+        else:
+            wniosek, informacje_wydzialow, wzor = przytnij_do_budzetu(limit, wniosek, informacje_wydzialow, wzor)
+            wiadomosci = prompty.projekt_odpowiedzi(wniosek, informacje_wydzialow, wzor)
+        async for kawalek in self._strumien(wiadomosci, max_tokens=MAX_TOKENOW_PISMA):
             yield kawalek
 
     async def zapytaj(self, wiadomosci: list[dict], *, max_tokens: int) -> str:
@@ -159,6 +174,26 @@ class BielikService:
     async def dostepny_limit_znakow(self, max_tokens_odpowiedzi: int) -> int:
         """Ile znaków tekstu można wysłać, żeby zmieścić się w oknie kontekstu modelu."""
         return await self._limit_znakow(max_tokens_odpowiedzi)
+
+    async def osadz(self, teksty: list[str], model: str = EMBED_MODEL) -> list[list[float]]:
+        """Wektory znaczenia tekstów (model embeddingów w LM Studio) – do wyszukiwania podobnych spraw."""
+        wektory: list[list[float]] = []
+        for poczatek in range(0, len(teksty), ROZMIAR_PACZKI_OSADZEN):
+            paczka = teksty[poczatek:poczatek + ROZMIAR_PACZKI_OSADZEN]
+            try:
+                async with self._klient(httpx.Timeout(120.0, connect=3.0)) as klient:
+                    odpowiedz = await klient.post(f'{self.url}/embeddings', json={'model': model, 'input': paczka})
+            except httpx.HTTPError as blad:
+                raise _blad_polaczenia(blad, self.url) from blad
+            _sprawdz_status(odpowiedz)
+            try:
+                dane = sorted(odpowiedz.json()['data'], key=lambda d: d.get('index', 0))
+                wektory += [[float(x) for x in d['embedding']] for d in dane]
+            except (KeyError, TypeError, ValueError) as blad:
+                raise BladAI(f'Model embeddingów „{model}” zwrócił nieoczekiwaną odpowiedź.') from blad
+        if len(wektory) != len(teksty):
+            raise BladAI(f'Model embeddingów „{model}” zwrócił złą liczbę wektorów.')
+        return wektory
 
     # --- komunikacja z serwerem ---------------------------------------------------------
 

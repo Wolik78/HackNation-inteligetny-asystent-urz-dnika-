@@ -36,6 +36,7 @@ def serializuj(stan: dict) -> str:
         'kontrola': asdict(kontrola) if kontrola else None,
         'kontrola_tekst': stan.get('kontrola_tekst'),
         'kompletnosc': kompletnosc,
+        'wzor': stan.get('wzor'),  # plik archiwalnej odpowiedzi użytej jako wzór pisma
     }
     return json.dumps(dane, ensure_ascii=False, indent=2)
 
@@ -63,6 +64,7 @@ def wczytaj(katalog_sprawy: Path) -> dict:
             'kontrola_tekst': dane.get('kontrola_tekst'),
             'kontrola': _wynik_kontroli(dane.get('kontrola')),
             'kompletnosc': _kompletnosc(dane.get('kompletnosc')),
+            'wzor': dane.get('wzor') if isinstance(dane.get('wzor'), str) else None,
         }
     except (ValueError, TypeError, KeyError, AttributeError):
         uszkodzony = sciezka.with_name(f'{NAZWA_PLIKU}.uszkodzony-{datetime.now():%Y%m%d-%H%M%S}')

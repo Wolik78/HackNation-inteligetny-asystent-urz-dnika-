@@ -58,6 +58,34 @@ def rozpoznaj_obraz(obraz: bytes) -> str:
     return '\n'.join(linia['text'] for linia in wynik['lines'])
 
 
+Slowo = tuple[str, float, float, float, float]   # (tekst, x0, y0, x1, y1) w pikselach obrazu
+
+
+def linie_ze_slowami(obraz: bytes) -> list[list[Slowo]]:
+    """Linie tekstu z położeniem każdego słowa – do zaczerniania danych na skanach i zdjęciach."""
+    if not dostepny():
+        raise OcrNiedostepny('OCR niedostępny na tym komputerze.')
+    import winocr
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(obraz)).convert('RGBA')
+    skala = 1.0
+    if max(img.size) > MAKS_BOK_OBRAZU:
+        szerokosc = img.width
+        img.thumbnail((MAKS_BOK_OBRAZU, MAKS_BOK_OBRAZU))
+        skala = szerokosc / img.width
+    wynik = winocr.recognize_pil_sync(img, lang=JEZYK)
+    linie = []
+    for linia in wynik['lines']:
+        slowa = []
+        for slowo in linia['words']:
+            r = slowo['bounding_rect']
+            slowa.append((slowo['text'], r['x'] * skala, r['y'] * skala,
+                          (r['x'] + r['width']) * skala, (r['y'] + r['height']) * skala))
+        linie.append(slowa)
+    return linie
+
+
 def strony_pdf_do_ocr(sciezka: Path, numery: list[int]) -> dict[int, str]:
     """OCR wskazanych stron PDF (numeracja od 0) -> {nr strony: tekst}."""
     import pymupdf

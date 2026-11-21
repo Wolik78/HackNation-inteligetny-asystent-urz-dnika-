@@ -48,6 +48,8 @@ class Wniosek:
     sugerowane_wydzialy: list[str] = field(default_factory=list)  # podpowiedź Bielika
     uzasadnienie_wydzialu: str = ''
     historia: list[dict] = field(default_factory=list)            # {'kiedy': ISO, 'zdarzenie': tekst}
+    rodzaj: str = 'zwykla'                                        # klasyfikacja (asystent/klasyfikacja.py)
+    uzasadnienie_rodzaju: str = ''
     testowy: bool = False
 
     # --- terminy ---
@@ -153,7 +155,7 @@ def nastepny_numer(rok: int | None = None) -> str:
 
 def dodaj(*, nr: str, temat: str, wnioskodawca: str, data_wplywu: date, kto: str,
           kwerenda: bool = False, kontakt: str = '', sugerowane_wydzialy: list[str] | None = None,
-          uzasadnienie_wydzialu: str = '') -> Wniosek:
+          uzasadnienie_wydzialu: str = '', rodzaj: str = 'zwykla', uzasadnienie_rodzaju: str = '') -> Wniosek:
     if any(w.nr == nr for w in _wnioski):
         raise ValueError(f'Wniosek o numerze {nr} już istnieje.')
     wniosek = Wniosek(
@@ -161,6 +163,7 @@ def dodaj(*, nr: str, temat: str, wnioskodawca: str, data_wplywu: date, kto: str
         nr=nr, temat=temat, wnioskodawca=wnioskodawca, data_wplywu=data_wplywu, kto=kto,
         kwerenda=kwerenda, kontakt=kontakt,
         sugerowane_wydzialy=list(sugerowane_wydzialy or []), uzasadnienie_wydzialu=uzasadnienie_wydzialu,
+        rodzaj=rodzaj, uzasadnienie_rodzaju=uzasadnienie_rodzaju,
     )
     _odnotuj(wniosek, 'Zarejestrowano wniosek' + (' (z kwerendą)' if kwerenda else ''))
     _wnioski.append(wniosek)
@@ -204,6 +207,16 @@ def ustaw_kwerende(wniosek: Wniosek, wlaczona: bool, termin: date | None = None)
     wniosek.termin_kwerendy = termin if wlaczona else None
     _odnotuj(wniosek, f'Kwerenda – nowy termin {wniosek.termin:%d.%m.%Y}' if wlaczona else 'Wyłączono kwerendę')
     _zapisz()
+
+
+def ustaw_rodzaj(wniosek: Wniosek, rodzaj: str, nazwa: str, uzasadnienie: str = '') -> bool:
+    """Zmienia rodzaj sprawy (klasyfikację). Zwraca False, jeśli nic się nie zmieniło."""
+    if wniosek.rodzaj == rodzaj:
+        return False
+    wniosek.rodzaj, wniosek.uzasadnienie_rodzaju = rodzaj, uzasadnienie
+    _odnotuj(wniosek, f'Rodzaj sprawy: {nazwa}')
+    _zapisz()
+    return True
 
 
 def aktualizuj(wniosek: Wniosek, *, temat: str, wnioskodawca: str, kontakt: str, data_wplywu: date,

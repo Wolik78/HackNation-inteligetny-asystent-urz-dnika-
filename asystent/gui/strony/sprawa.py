@@ -8,25 +8,21 @@ from pathlib import Path
 
 from nicegui import app, run, ui
 
-from ... import rejestr, stan_sprawy
+from ... import klasyfikacja, rejestr, stan_sprawy
+from ...archiwum import opis_dokumentu
 from ...ai import BladAI, usun_markdown
 from ...ai.wydzialy import dobierz, nazwy_wydzialow
-from ...anonimizacja import podziel_na_fragmenty, wykryj_wzorce, zamaskuj
+from ...anonimizacja import podziel_na_fragmenty, zamaskuj
 from ...kontrola import WynikKontroli, sprawdz_pismo
 from ...pliki import FORMATY, Kategoria, ZapisanyPlik, eksportuj, nazwa_pliku_odpowiedzi
 from ...rejestr import Wniosek
-from ...uslugi import bielik, magazyn
+from ...uslugi import archiwum, bielik, magazyn
+from ..anonimizacja_widok import PanelAnonimizacji
+from ..archiwum_widok import karta_trafienia, opis_trybu
 from ..komponenty import (WgranePliki, blad_ai, karta_pliku, naglowek_strony, odmiana, otworz_w_systemie,
-                          potwierdz, strefa_wgrywania, todo, wskaznik_postepu, zapisz_wgrane)
+                          potwierdz, strefa_wgrywania, wskaznik_postepu, zapisz_wgrane)
 from ..kontekst import biezacy
 from .wnioski import KOLOR_STATUSU
-
-# Wyszukiwanie w archiwum to osobny moduł – na razie dane przykładowe.
-PODOBNE_SPRAWY = [
-    ('UDIP.112.2025', 'Wydatki na promocję miasta w 2024 r.', 'Biuro Komunikacji Społecznej', '12.03.2025', 92),
-    ('UDIP.87.2025', 'Budżet kampanii reklamowych miasta', 'Wydział Finansów', '02.02.2025', 78),
-    ('UDIP.240.2024', 'Umowy z agencjami PR', 'Wydział Zamówień Publicznych', '18.10.2024', 64),
-]
 
 PROJEKT_ODPOWIEDZI = (
     'Szanowny Panie,\n\n'
@@ -54,7 +50,7 @@ def _tekst_wniosku(w: Wniosek) -> str:
 
 # --- krok 1: wniosek -----------------------------------------------------------------
 
-def _krok_wniosek(w: Wniosek) -> Odswiezacz:
+def _krok_wniosek(w: Wniosek, po_zmianie: Callable[[], None]) -> Odswiezacz:
     @ui.refreshable
     def dane_i_przebieg() -> None:
         with ui.row().classes('w-full items-start no-wrap gap-8'):
@@ -78,6 +74,7 @@ def _krok_wniosek(w: Wniosek) -> Odswiezacz:
                                           subtitle=f'{kiedy[8:10]}.{kiedy[5:7]}.{kiedy[:4]} {kiedy[11:16]}')
 
     dane_i_przebieg()
+    _rodzaj_sprawy(w, po_zmianie)
     ui.separator().classes('my-2')
 
     async def wgraj(pliki: WgranePliki) -> None:
@@ -102,21 +99,93 @@ def _krok_wniosek(w: Wniosek) -> Odswiezacz:
     return dane_i_przebieg.refresh
 
 
+def _rodzaj_sprawy(w: Wniosek, po_zmianie: Callable[[], None]) -> None:
+    """Klasyfikacja wniosku i ścieżka postępowania – podpowiedź asystenta, decyzja urzędnika."""
+    def zmien(zdarzenie) -> None:
+        if rejestr.ustaw_rodzaj(w, zdarzenie.value, klasyfikacja.rodzaj(zdarzenie.value).nazwa):
+            sciezka.refresh()
+            po_zmianie()
+
+    with ui.card().classes('w-full q-mt-sm').props('flat bordered'):
+        with ui.row().classes('w-full items-start no-wrap gap-4'):
+            ui.select({k: r.nazwa for k, r in klasyfikacja.RODZAJE.items()}, value=w.rodzaj, label='Rodzaj sprawy',
+                      on_change=zmien).classes('w-72 shrink-0')
+
+            @ui.refreshable
+            def sciezka() -> None:
+                rodzaj = klasyfikacja.rodzaj(w.rodzaj)
+                with ui.column().classes('gap-1 col'):
+                    with ui.row().classes('items-center gap-2 no-wrap'):
+                        ui.icon(rodzaj.ikona, color=rodzaj.kolor)
+                        ui.label('Ścieżka postępowania').classes('text-weight-medium')
+                    ui.label(rodzaj.sciezka).classes('text-body2')
+                    ui.label(f'„Generuj projekt” w kroku 5 przygotuje: {rodzaj.pismo}.').classes('text-caption text-grey-7')
+                    if w.uzasadnienie_rodzaju:
+                        ui.label(f'Podpowiedź asystenta: {w.uzasadnienie_rodzaju}').classes('text-caption text-grey-7')
+
+            sciezka()
+
+
 # --- krok 2: podobne sprawy -----------------------------------------------------------
 
-def _krok_podobne() -> Odswiezacz:
-    ui.label('Podobne sprawy z archiwum').classes('text-weight-medium')
-    ui.label('TODO: wyszukiwanie w archiwum – poniżej dane przykładowe.').classes('text-caption text-grey-7')
-    for nr, temat, wydzial, data, podobienstwo in PODOBNE_SPRAWY:
-        with ui.card().classes('w-full').props('flat bordered'):
-            with ui.row().classes('w-full items-center justify-between no-wrap'):
-                with ui.column().classes('gap-0'):
-                    ui.label(f'{nr} – {temat}').classes('text-weight-medium')
-                    ui.label(f'{wydzial} · {data}').classes('text-caption text-grey-7')
-                with ui.row().classes('items-center no-wrap'):
-                    ui.linear_progress(podobienstwo / 100, show_value=False).classes('w-32')
-                    ui.label(f'{podobienstwo}%').classes('w-10')
-                    ui.button('Otwórz', on_click=todo('podgląd sprawy archiwalnej')).props('flat dense')
+def _krok_podobne(w: Wniosek, stan: dict) -> Odswiezacz:
+    """Podobne sprawy z archiwum i rejestru – szukane od razu po otwarciu sprawy (J1).
+
+    Najlepsza archiwalna odpowiedź trafia automatycznie jako wzór do kroku „Projekt odpowiedzi”.
+    """
+    wyszukiwanie: dict = {'wynik': None, 'trwa': False}
+
+    async def szukaj() -> None:
+        if wyszukiwanie['trwa'] or naglowek.is_deleted:
+            return
+        wyszukiwanie['trwa'] = True
+        wyniki.refresh()
+        try:
+            wynik = await archiwum.szukaj(_tekst_wniosku(w) or w.temat, pomin_wniosek=w.id)
+        finally:
+            wyszukiwanie['trwa'] = False
+        if naglowek.is_deleted:
+            return
+        wyszukiwanie['wynik'] = wynik
+        if stan['wzor'] is None and (najlepszy := wynik.najlepszy_wzor):
+            stan['wzor'] = najlepszy.dokument.plik.plik
+        wyniki.refresh()
+
+    def na_wzor(trafienie) -> None:
+        stan['wzor'] = trafienie.dokument.plik.plik
+        ui.notify(f'Wzór pisma: {trafienie.dokument.tytul}. Użyje go Bielik w kroku „Projekt odpowiedzi”.',
+                  type='positive')
+        wyniki.refresh()
+
+    with ui.row().classes('w-full items-center justify-between') as naglowek:
+        ui.label('Podobne sprawy z archiwum i z rejestru (ostatni rok)').classes('text-weight-medium')
+        ui.button('Szukaj ponownie', icon='refresh', on_click=szukaj).props('flat dense')
+
+    @ui.refreshable
+    def wyniki() -> None:
+        wynik = wyszukiwanie['wynik']
+        if wyszukiwanie['trwa'] or wynik is None:
+            with ui.row().classes('items-center gap-2 text-primary'):
+                ui.spinner(size='sm')
+                ui.label('Szukam podobnych spraw…').classes('text-caption')
+            return
+        if not wynik.liczba_dokumentow:
+            ui.label('Archiwum jest puste. Dodaj archiwalne odpowiedzi w Bazie wiedzy (rodzaj „Archiwalna '
+                     'odpowiedź”) – wtedy pojawią się tu podobne sprawy.').classes('text-grey-7')
+            ui.button('Przejdź do Bazy wiedzy', icon='menu_book',
+                      on_click=lambda: ui.navigate.to('/baza')).props('flat dense')
+            return
+        ui.label(opis_trybu(wynik)).classes('text-caption text-grey-7')
+        if wynik.komunikat:
+            ui.label(wynik.komunikat).classes('text-caption text-orange-9')
+        if not wynik.trafienia:
+            ui.label('Nie znaleziono podobnych spraw.').classes('text-grey-7')
+            return
+        for trafienie in wynik.trafienia:
+            karta_trafienia(trafienie, na_wzor=na_wzor, wybrany_wzor=stan['wzor'])
+
+    wyniki()
+    ui.timer(0.3, szukaj, once=True)  # od razu po otwarciu sprawy – wzór pisma czeka, zanim urzędnik tu zajrzy
     return None
 
 
@@ -233,12 +302,24 @@ def _krok_odpowiedzi(w: Wniosek, po_zmianie_statusu: Callable[[], None]) -> Odsw
 
 # --- krok 5: projekt odpowiedzi (generowany na żywo) ---------------------------------------
 
+def _dane_do_pisma(w: Wniosek) -> str:
+    """Dane sprawy do pism innych niż odpowiedź (wezwanie, pismo informujące)."""
+    return (f'Numer sprawy: {w.nr}\nTemat: {w.temat}\nData wpływu wniosku: {w.data_wplywu:%d.%m.%Y}\n'
+            f'Termin odpowiedzi: {w.termin:%d.%m.%Y}\nRodzaj sprawy: {klasyfikacja.rodzaj(w.rodzaj).nazwa}')
+
+
+def _nazwa_wzoru(plik: ZapisanyPlik) -> str:
+    temat, nr, _ = opis_dokumentu(plik.tekst(), plik.nazwa_oryginalna)
+    return f'{nr} – {temat}' if nr else temat
+
+
 def _krok_projekt(w: Wniosek, stan: dict) -> Odswiezacz:
-    archiwum = magazyn.lista(Kategoria.ARCHIWUM)
+    archiwalne = magazyn.lista(Kategoria.ARCHIWUM)
 
     async def generuj() -> None:
         odpowiedzi = magazyn.lista(Kategoria.ODPOWIEDZ_WYDZIALU, sprawa=w.nr)
-        if not odpowiedzi:
+        zwykla = w.rodzaj == klasyfikacja.DOMYSLNY  # pozostałe rodzaje: wezwanie / pismo informujące, bez danych wydziałów
+        if zwykla and not odpowiedzi:
             ui.notify('Brak odpowiedzi wydziałów – Bielik wstawi pola [UZUPEŁNIĆ].', type='warning')
         if stan['projekt'].strip() and stan['projekt'] != stan['szablon'] \
                 and not await potwierdz('Zastąpić obecną treść projektu nowym projektem?', 'Zastąp'):
@@ -247,7 +328,7 @@ def _krok_projekt(w: Wniosek, stan: dict) -> Odswiezacz:
         tekst_wniosku = _tekst_wniosku(w) or f'Wniosek dotyczy: {w.temat}. Wnioskodawca: {w.wnioskodawca}.'
         informacje = '\n\n'.join(f'[{p.opis or p.nazwa_oryginalna}]\n{p.tekst()}' for p in odpowiedzi) \
             or '(wydziały nie przekazały jeszcze informacji)'
-        wzor = next((p.tekst() for p in archiwum if p.plik == wybor_wzoru.value), None)
+        wzor = next((p.tekst() for p in archiwalne if p.plik == stan['wzor']), None)
 
         stan.update(projekt='', ukryte=set(), wykryte={}, generowanie=True)
         przycisk_generuj.set_visibility(False)
@@ -255,7 +336,8 @@ def _krok_projekt(w: Wniosek, stan: dict) -> Odswiezacz:
         postep.set_visibility(True)
         try:
             async with aclosing(bielik.generuj_odpowiedz(wniosek=tekst_wniosku, informacje_wydzialow=informacje,
-                                                         wzor=wzor)) as strumien:
+                                                         wzor=wzor if zwykla else None, rodzaj=w.rodzaj,
+                                                         dane_sprawy=_dane_do_pisma(w))) as strumien:
                 async for kawalek in strumien:
                     stan['projekt'] += kawalek
                     if not stan['generowanie']:
@@ -277,13 +359,17 @@ def _krok_projekt(w: Wniosek, stan: dict) -> Odswiezacz:
     with ui.row().classes('w-full items-center justify-between'):
         ui.label('Projekt odpowiedzi').classes('text-weight-medium')
         with ui.row().classes('items-center'):
-            wybor_wzoru = ui.select({p.plik: p.nazwa_oryginalna for p in archiwum},
-                                    label='Wzór z archiwum (opcjonalnie)', clearable=True).classes('w-72')
+            # wzór wybiera się sam z najlepszej podobnej sprawy (krok 2) – tu można go zmienić albo usunąć
+            ui.select({p.plik: _nazwa_wzoru(p) for p in archiwalne}, label='Wzór z archiwum (opcjonalnie)',
+                      clearable=True).bind_value(stan, 'wzor').classes('w-80')
             przycisk_generuj = ui.button('Generuj projekt (Bielik)', icon='auto_awesome', on_click=generuj)
             przycisk_stop = ui.button('Zatrzymaj', icon='stop',
                                       on_click=lambda: stan.update(generowanie=False)).props('outline color=negative')
             przycisk_stop.set_visibility(False)
     postep = wskaznik_postepu('Bielik pisze projekt na podstawie wniosku i odpowiedzi wydziałów… (ok. 1–2 min)')
+    ui.label().bind_text_from(w, 'rodzaj', backward=lambda k: f'Rodzaj pisma (wg rodzaju sprawy, krok 1): '
+                                                            f'{klasyfikacja.rodzaj(k).pismo}.') \
+        .classes('text-caption text-grey-7')
     ui.textarea().bind_value(stan, 'projekt').classes('w-full').props('outlined autogrow')
     ui.label('Sprawdź treść merytorycznie – projekt przygotowuje AI, decyzja należy do Ciebie. '
              'Pola [UZUPEŁNIĆ] wymagają uzupełnienia.').classes('text-caption text-grey-7')
@@ -435,82 +521,8 @@ def _plakietka(tekst: str, kolor: str, ikona: str) -> None:
 # --- krok 6: anonimizacja --------------------------------------------------------------
 
 def _krok_anonimizacja(stan: dict) -> Odswiezacz:
-    async def wykryj() -> None:
-        tekst = stan['projekt']
-        if not tekst.strip():
-            ui.notify('Projekt odpowiedzi jest pusty.', type='warning')
-            return
-        przycisk.props('loading')
-        postep.set_visibility(True)
-        wykryte = dict(wykryj_wzorce(tekst))
-        try:
-            for ciag in await bielik.wykryj_dane_osobowe(tekst):
-                wykryte.setdefault(ciag, 'Dane osobowe (Bielik)')
-        except BladAI as blad:
-            blad_ai(f'Bielik niedostępny – pokazuję tylko dane wykryte wzorcami (PESEL, telefon, e-mail…). {blad}')
-        finally:
-            przycisk.props(remove='loading')
-            postep.set_visibility(False)
-        stan['wykryte'] = {**wykryte, **{c: t for c, t in stan['wykryte'].items() if t == 'Dodane ręcznie'}}
-        widok.refresh()
-        ui.notify(f'Znaleziono {odmiana(len(wykryte), "fragment", "fragmenty", "fragmentów")} do sprawdzenia.')
-
-    def przelacz(ciag: str) -> None:
-        stan['ukryte'] ^= {ciag}
-        widok.refresh()
-
-    def zatwierdz_wszystkie() -> None:
-        stan['ukryte'] |= set(stan['wykryte'])
-        widok.refresh()
-
-    def dodaj_recznie() -> None:
-        ciag = (reczny.value or '').strip()
-        if not ciag or ciag not in stan['projekt']:
-            ui.notify('Nie ma takiego fragmentu w projekcie – przepisz go dokładnie.', type='warning')
-            return
-        stan['wykryte'][ciag] = 'Dodane ręcznie'
-        stan['ukryte'].add(ciag)
-        reczny.value = ''
-        widok.refresh()
-
-    @ui.refreshable
-    def widok() -> None:
-        tekst = stan['projekt']
-        obecne = {c for c in stan['wykryte'] if c in tekst}
-        stan['ukryte'] &= obecne
-        with ui.card().classes('w-full').props('flat bordered'):
-            with ui.element('div').classes('text-body1').style('line-height: 2; white-space: pre-wrap'):
-                for fragment, dane in podziel_na_fragmenty(tekst, obecne):
-                    if not dane:
-                        ui.label(fragment).classes('inline')
-                        continue
-                    ukryty = fragment in stan['ukryte']
-                    pole = ui.label(fragment).classes('inline px-1 rounded-borders cursor-pointer ' +
-                                                      ('bg-black text-black' if ukryty else 'bg-grey-4'))
-                    pole.tooltip(f'{stan["wykryte"].get(fragment, "")} – kliknij, żeby '
-                                 f'{"odkryć" if ukryty else "ukryć"}')
-                    pole.on('click', lambda _, f=fragment: przelacz(f))
-        info.set_text(f'Do ukrycia: {len(stan["ukryte"])} z {len(obecne)} wskazanych')
-
-    with ui.row().classes('w-full no-wrap gap-6 items-start'):
-        kontener = ui.column().classes('col')
-
-        with ui.column().classes('w-72 shrink-0'):
-            info = ui.label().classes('text-weight-medium')
-            ui.label('Szare – propozycja asystenta. Czarne – zatwierdzone do ukrycia. '
-                     'Kliknij fragment, żeby przełączyć. Ukrywane są wszystkie wystąpienia.') \
-                .classes('text-caption text-grey-7')
-            przycisk = ui.button('Wykryj dane osobowe', icon='auto_awesome', on_click=wykryj).classes('w-full')
-            postep = wskaznik_postepu('Bielik szuka danych osobowych…')
-            ui.button('Zatwierdź wszystkie', icon='done_all', on_click=zatwierdz_wszystkie) \
-                .props('outline').classes('w-full')
-            with ui.row().classes('w-full items-center no-wrap'):
-                reczny = ui.input('Ukryj własny fragment').props('dense').classes('col')
-                ui.button(icon='add', on_click=dodaj_recznie).props('flat round dense').tooltip('Dodaj do ukrycia')
-
-    with kontener:
-        widok()
-    return widok.refresh
+    panel = PanelAnonimizacji(stan, klucz_tekstu='projekt', pusty='Projekt odpowiedzi jest pusty.')
+    return panel.widok.refresh
 
 
 # --- krok 7: eksport -------------------------------------------------------------------
@@ -763,11 +775,14 @@ def strona_sprawa(id: str) -> None:
         ui.label('Nie ma takiej sprawy.')
         return
     szablon = PROJEKT_ODPOWIEDZI.format(wplyw=f'{w.data_wplywu:%d.%m.%Y}')
-    stan = {'projekt': szablon, 'szablon': szablon, 'wykryte': {}, 'ukryte': set(), 'generowanie': False}
+    stan = {'projekt': szablon, 'szablon': szablon, 'wykryte': {}, 'ukryte': set(), 'generowanie': False,
+            'wzor': None}
     katalog = magazyn.katalog_sprawy(w.nr)
     zapisany = stan_sprawy.wczytaj(katalog)
     zapisano = zapisany.pop('zapisano', None)
     stan.update(zapisany)
+    if stan['wzor'] not in {p.plik for p in magazyn.lista(Kategoria.ARCHIWUM)}:
+        stan['wzor'] = None  # wzór usunięty z Bazy wiedzy
 
     odswiezacze: dict[str, Callable[[], None]] = {}
 
@@ -791,6 +806,9 @@ def strona_sprawa(id: str) -> None:
                             ui.icon('info_outline', size='xs').tooltip(w.uwaga_o_terminie)
                         if w.kwerenda:
                             ui.badge(f'kwerenda +{w.dni_kwerendy} dni', color='purple-1', text_color='purple-9')
+                        if w.rodzaj != klasyfikacja.DOMYSLNY:
+                            rodzaj = klasyfikacja.rodzaj(w.rodzaj)
+                            ui.badge(rodzaj.nazwa, color=rodzaj.kolor).props('outline').tooltip(rodzaj.sciezka)
                         ui.label(f'· prowadzi {w.kto}')
 
         naglowek_sprawy()
@@ -830,8 +848,8 @@ def strona_sprawa(id: str) -> None:
     ui.timer(2.0, autozapis)
 
     kroki = [
-        ('Wniosek', 'description', lambda: _krok_wniosek(w)),
-        ('Podobne sprawy', 'manage_search', _krok_podobne),
+        ('Wniosek', 'description', lambda: _krok_wniosek(w, po_zmianie_sprawy)),
+        ('Podobne sprawy', 'manage_search', lambda: _krok_podobne(w, stan)),
         ('Wydziały', 'account_tree', lambda: _krok_wydzialy(w)),
         ('Odpowiedzi wydziałów', 'upload_file', lambda: _krok_odpowiedzi(w, po_zmianie_sprawy)),
         ('Projekt odpowiedzi', 'edit_note', lambda: _krok_projekt(w, stan)),

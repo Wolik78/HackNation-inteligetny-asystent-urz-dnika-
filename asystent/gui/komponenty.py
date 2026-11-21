@@ -22,10 +22,6 @@ IKONY_TYPOW = {'PDF': ('picture_as_pdf', 'red-7'), 'DOCX': ('description', 'blue
                'DOC': ('description', 'blue-8'), 'TXT': ('article', 'grey-7')}
 
 
-def todo(co: str) -> Callable[[], None]:
-    return lambda: ui.notify(f'TODO: {co}', type='info')
-
-
 def odmiana(n: int, jeden: str, kilka: str, wiele: str) -> str:
     """Polska odmiana liczebnika: 1 plik, 2 pliki, 5 plików."""
     if n == 1:
