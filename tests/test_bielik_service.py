@@ -198,7 +198,7 @@ def test_generowanie_strumieniowe():
         {'choices': [{'delta': {'content': 'Szanowny '}}]},
         {'choices': [{'delta': {'content': 'Panie,'}}]},
     ]
-    cialo = ''.join(f'data: {json.dumps(l)}\n\n' for l in linie) + 'data: nie-json\n\ndata: [DONE]\n\n'
+    cialo = ''.join(f'data: {json.dumps(linia)}\n\n' for linia in linie) + 'data: nie-json\n\ndata: [DONE]\n\n'
     wyslane = {}
 
     def obsluga(request, payload):

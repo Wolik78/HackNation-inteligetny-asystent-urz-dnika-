@@ -54,8 +54,20 @@ def wyciagnij_tekst(sciezka: Path) -> WynikEkstrakcji:
     return wynik
 
 
+# Twarde i wąskie spacje (częste w PDF-ach i Wordzie) – jako zwykła spacja, żeby wzorce danych osobowych
+# („601 234 567”, „85-001 Bydgoszcz”) działały niezależnie od tego, jak dokument został złożony.
+BIALE_ZNAKI = dict.fromkeys(map(ord, '\xa0          '), ' ')
+LACZNIKI = dict.fromkeys(map(ord, '‐‑'), '-')   # łącznik i łącznik nierozdzielający
+
+
+def normalizuj_znaki(tekst: str) -> str:
+    """Ujednolica spacje i łączniki (wspólne dla odczytu tekstu i lokalizowania danych przy zaczernianiu)."""
+    return tekst.translate(BIALE_ZNAKI).translate(LACZNIKI)
+
+
 def _normalizuj(tekst: str) -> str:
     tekst = unicodedata.normalize('NFC', tekst)  # PDF-y czasem rozbijają „ą” na „a” + ogonek
+    tekst = normalizuj_znaki(tekst).replace('\xad', '')  # miękki łącznik (Word) jest niewidoczny
     tekst = tekst.replace('\r\n', '\n').replace('\r', '\n').replace('\x00', '')
     tekst = '\n'.join(linia.rstrip() for linia in tekst.split('\n'))
     tekst = re.sub(r'\n{3,}', '\n\n', tekst)
@@ -64,19 +76,20 @@ def _normalizuj(tekst: str) -> str:
 
 # --- PDF ---------------------------------------------------------------------
 
+def tekst_strony_pdf(strona) -> str:
+    """Tekst strony PDF (PyMuPDF). Miękki łącznik w PDF to narysowany znak „-”, więc zamieniamy go na myślnik."""
+    return strona.get_text().replace('\xad', '-')
+
+
 def _z_pdf(sciezka: Path) -> WynikEkstrakcji:
-    from pypdf import PdfReader
+    import pymupdf
 
-    czytnik = PdfReader(sciezka)
-    if czytnik.is_encrypted:
-        try:
-            odszyfrowano = czytnik.decrypt('')  # wiele PDF-ów ma tylko hasło właściciela
-        except Exception:
-            odszyfrowano = 0
-        if not odszyfrowano:
+    # z pamięci, nie z dysku: przy uszkodzonym pliku PyMuPDF nie zostawia go otwartego (Windows nie dałby go usunąć)
+    with pymupdf.open(stream=sciezka.read_bytes(), filetype='pdf') as pdf:
+        # wiele PDF-ów ma tylko hasło właściciela (ograniczenia drukowania) – otwierają się bez hasła
+        if pdf.needs_pass and not pdf.authenticate(''):
             raise BladPliku('PDF jest zabezpieczony hasłem. Zdejmij zabezpieczenie i wgraj plik ponownie.')
-
-    strony = [(strona.extract_text() or '') for strona in czytnik.pages]
+        strony = [tekst_strony_pdf(strona) for strona in pdf]
     ostrzezenia = []
     do_ocr = [nr for nr, s in enumerate(strony) if len(s.strip()) < ocr.MIN_ZNAKOW_STRONY]
     if do_ocr and ocr.dostepny():
@@ -92,7 +105,8 @@ def _z_pdf(sciezka: Path) -> WynikEkstrakcji:
     if strony and puste == len(strony):
         ostrzezenia.append('PDF nie ma warstwy tekstowej (prawdopodobnie skan), a OCR nie odczytał tekstu.'
                            if ocr.dostepny() else
-                           'PDF nie ma warstwy tekstowej (prawdopodobnie skan), a OCR jest niedostępny na tym komputerze.')
+                           'PDF nie ma warstwy tekstowej (prawdopodobnie skan), a OCR jest niedostępny na tym '
+                           'komputerze.')
     elif puste:
         ostrzezenia.append(f'{puste} z {len(strony)} stron nie zawiera tekstu (możliwe skany).')
     return WynikEkstrakcji('\n\n'.join(strony), len(strony), ostrzezenia)

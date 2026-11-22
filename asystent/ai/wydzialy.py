@@ -1,26 +1,20 @@
-"""Dobór wydziałów – most między aplikacją a modułem kolegi (`program2.py` + `wydzialy.md` w katalogu repozytorium).
+"""Dobór wydziałów w aplikacji – nakładka na algorytm z `dobor_wydzialow.py` (wykaz: `asystent/zasoby/wydzialy.md`).
 
-Sam algorytm jest w `program2.py`: ranking słów kluczowych i opisów zadań z BIP, a potem Bielik wybiera
+Sam algorytm jest w `dobor_wydzialow.py`: ranking słów kluczowych i opisów zadań z BIP, a potem Bielik wybiera
 spośród najlepszych kandydatów (bez Bielika – wynik z rankingu). Tutaj tylko:
 - lista wydziałów wczytywana raz,
 - wynik w postaci wygodnej dla GUI i czatu,
-- wersja asynchroniczna (zapytanie do Bielika w `program2` jest blokujące, więc idzie w osobnym wątku).
+- wersja asynchroniczna (zapytanie do Bielika w algorytmie jest blokujące, więc idzie w osobnym wątku).
 """
 
 from __future__ import annotations
 
 import asyncio
 import re
-import sys
 from dataclasses import dataclass, field
 from functools import lru_cache
-from pathlib import Path
 
-KATALOG_REPOZYTORIUM = Path(__file__).resolve().parents[2]
-if str(KATALOG_REPOZYTORIUM) not in sys.path:
-    sys.path.insert(0, str(KATALOG_REPOZYTORIUM))
-
-import program2  # noqa: E402  – moduł kolegi, celowo w katalogu głównym (uruchamiany też z terminala)
+from . import dobor_wydzialow as algorytm
 
 ZRODLO_BIELIK = 'bielik'
 ZRODLO_RANKING = 'ranking'
@@ -62,8 +56,8 @@ class WynikDoboru:
 def wydzialy() -> tuple[dict, ...]:
     """Wydziały z `wydzialy.md` (nazwa, skrot, zadania, rejestry). Pusta krotka, gdy pliku brak."""
     try:
-        return tuple(program2.wczytaj_wydzialy(program2.SCIEZKA_WYDZIALOW))
-    except (OSError, SystemExit):  # program2 kończy się sys.exit, gdy plik jest pusty
+        return tuple(algorytm.wczytaj_wydzialy(algorytm.SCIEZKA_WYDZIALOW))
+    except (OSError, SystemExit):  # algorytm kończy się sys.exit, gdy plik jest pusty
         return ()
 
 
@@ -85,10 +79,10 @@ def dobierz(tekst: str, *, uzyj_llm: bool = True) -> WynikDoboru:
     """Wydziały, do których trzeba skierować prośbę o informacje (blokujące – w GUI przez `run.io_bound`)."""
     lista = list(wydzialy())
     if not lista:
-        return WynikDoboru(komunikat=f'Brak listy wydziałów ({program2.SCIEZKA_WYDZIALOW}).')
+        return WynikDoboru(komunikat=f'Brak listy wydziałów ({algorytm.SCIEZKA_WYDZIALOW}).')
     if not tekst.strip():
         return WynikDoboru(komunikat='Brak tekstu wniosku.')
-    wybrane, zrodlo, komunikat = program2.dobierz(tekst, lista, uzyj_llm)
+    wybrane, zrodlo, komunikat = algorytm.dobierz(tekst, lista, uzyj_llm)
     propozycje = [Propozycja(w['skrot'], w['nazwa'], _czytelne(uzasadnienie)) for w, uzasadnienie in wybrane]
     return WynikDoboru(propozycje, zrodlo, re.sub(r'\s+', ' ', komunikat).strip())
 

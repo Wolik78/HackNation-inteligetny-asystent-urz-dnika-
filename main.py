@@ -1,13 +1,10 @@
 """Asystent UDIP – punkt startowy aplikacji.
 
 Uruchomienie:
-    uruchom.bat            -> okno desktopowe (domyślnie)
+    uruchom.bat            -> okno aplikacji (domyślnie)
     uruchom.bat --web      -> w przeglądarce na http://127.0.0.1:8080 (do debugowania)
 
-Kod aplikacji jest w pakiecie `asystent/`:
-    asystent/pliki/   – walidacja, odczyt tekstu, magazyn dokumentów, eksport pism
-    asystent/gui/     – ekrany i komponenty interfejsu
-    asystent/rejestr.py – lista wniosków (na razie dane testowe w pamięci)
+Kod aplikacji jest w pakiecie `asystent/` (opis struktury: README.md).
 """
 
 import sys

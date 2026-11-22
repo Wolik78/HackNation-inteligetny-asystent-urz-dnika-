@@ -19,7 +19,7 @@ from pathlib import Path
 from ..anonimizacja import MASKA, zamaskuj
 from . import ocr
 from .eksport import eksportuj
-from .ekstrakcja import wyciagnij_tekst
+from .ekstrakcja import normalizuj_znaki, wyciagnij_tekst
 
 CZARNY = (0, 0, 0)
 MARGINES = 2  # px / pt wokół zaczernianego słowa
@@ -39,7 +39,8 @@ class WynikAnonimizacji:
 
 
 def _norm(tekst: str) -> str:
-    return ' '.join(tekst.split())
+    """Pojedyncze zwykłe spacje i ujednolicone łączniki – tak samo jak w odczytanym tekście."""
+    return ' '.join(normalizuj_znaki(tekst).replace('\xad', '-').split())
 
 
 def nazwa_wyniku(zrodlo: Path, rozszerzenie: str | None = None) -> str:
@@ -64,7 +65,8 @@ def zanonimizuj_plik(zrodlo: Path, ukryte: Iterable[str], katalog: Path) -> Wyni
         eksportuj(zamaskuj(tekst, ciagi), cel)
         wynik = WynikAnonimizacji(cel, zakryte)
         if rozszerzenie == '.doc':
-            wynik.uwagi.append('Stary format Word (.doc) – zapisano zanonimizowany tekst jako .docx (bez formatowania).')
+            wynik.uwagi.append('Stary format Word (.doc) – zapisano zanonimizowany tekst jako .docx (bez '
+                               'formatowania).')
     wynik.pozostale = _kontrola(wynik.sciezka, ciagi)
     return wynik
 
@@ -77,6 +79,60 @@ def _kontrola(sciezka: Path, ciagi: list[str]) -> list[str]:
 
 # --- PDF ------------------------------------------------------------------------------------
 
+Prostokat = tuple[float, float, float, float]
+Znak = tuple[str, Prostokat | None, int]   # (znak, jego prostokąt, numer linii)
+
+
+def _sekwencja(linie: Iterable[Iterable[tuple[str, Prostokat]]]) -> list[Znak]:
+    """Tekst strony jako ciąg znaków z położeniem. Odstępy i łączniki ujednolicone jak w odczytanym tekście,
+    linie połączone spacją – więc „ul. Fordońska 120 m. 4” znajdzie się także wtedy, gdy przechodzi do nowej linii.
+
+    Fragment to pojedynczy znak (PDF z tekstem) albo słowo ze spacją na końcu (OCR – znaki mają prostokąt słowa).
+    """
+    znaki: list[Znak] = []
+    for nr, linia in enumerate(linie):
+        for tekst, prostokat in linia:
+            for z in normalizuj_znaki(tekst).replace('\xad', '-'):
+                if not z.isspace():
+                    znaki.append((z, prostokat, nr))
+                elif znaki and znaki[-1][0] != ' ':
+                    znaki.append((' ', None, nr))
+        if znaki and znaki[-1][0] != ' ':
+            znaki.append((' ', None, nr))
+    return znaki
+
+
+def _lokalizuj(znaki: list[Znak], ciagi: list[str]) -> list[tuple[str, Prostokat]]:
+    """(ciąg, prostokąt) dla każdego wystąpienia – osobny prostokąt w każdej linii, przez którą ciąg przechodzi."""
+    tekst = ''.join(z for z, _, _ in znaki)
+    wynik = []
+    for ciag in ciagi:
+        for m in re.finditer(re.escape(ciag), tekst):
+            linie: dict[int, list[Prostokat]] = {}
+            for _, prostokat, nr in znaki[m.start():m.end()]:
+                if prostokat is not None:
+                    linie.setdefault(nr, []).append(prostokat)
+            for p in linie.values():
+                wynik.append((ciag, (min(r[0] for r in p), min(r[1] for r in p),
+                                     max(r[2] for r in p), max(r[3] for r in p))))
+    return wynik
+
+
+def _linie_ocr(obraz: bytes) -> list[list[tuple[str, Prostokat]]]:
+    return [[(s[0] + ' ', (s[1], s[2], s[3], s[4])) for s in slowa] for slowa in ocr.linie_ze_slowami(obraz)]
+
+
+# --- PDF ------------------------------------------------------------------------------------
+
+def _linie_pdf(strona) -> list[list[tuple[str, Prostokat]]]:
+    """Znaki strony PDF z prostokątami (PyMuPDF „rawdict”), linia po linii."""
+    linie = []
+    for blok in strona.get_text('rawdict')['blocks']:
+        for linia in blok.get('lines', []):
+            linie.append([(z['c'], tuple(z['bbox'])) for span in linia['spans'] for z in span['chars']])
+    return linie
+
+
 def _pdf(zrodlo: Path, ciagi: list[str], cel: Path) -> WynikAnonimizacji:
     import pymupdf
 
@@ -84,19 +140,19 @@ def _pdf(zrodlo: Path, ciagi: list[str], cel: Path) -> WynikAnonimizacji:
     with pymupdf.open(zrodlo) as pdf:
         for strona in pdf:
             if len(strona.get_text().strip()) >= ocr.MIN_ZNAKOW_STRONY:
-                for ciag in ciagi:
-                    for prostokat in strona.search_for(ciag):
-                        strona.add_redact_annot(prostokat, fill=CZARNY)
-                        zakryte += 1
-                        znalezione.add(ciag)
+                trafienia, skala, margines = _lokalizuj(_sekwencja(_linie_pdf(strona)), ciagi), 1.0, 0
             elif ocr.dostepny():  # skan – położenie słów z OCR
                 pix = strona.get_pixmap(dpi=ocr.DPI)
-                skala = strona.rect.width / pix.width
-                for ciag, (x0, y0, x1, y1) in _prostokaty_ocr(pix.tobytes('png'), ciagi):
-                    prostokat = pymupdf.Rect(x0 * skala, y0 * skala, x1 * skala, y1 * skala)
-                    strona.add_redact_annot(prostokat + (-MARGINES, -MARGINES, MARGINES, MARGINES), fill=CZARNY)
-                    zakryte += 1
-                    znalezione.add(ciag)
+                trafienia = _lokalizuj(_sekwencja(_linie_ocr(pix.tobytes('png'))), ciagi)
+                skala, margines = strona.rect.width / pix.width, MARGINES
+            else:
+                trafienia = []
+            for ciag, (x0, y0, x1, y1) in trafienia:
+                prostokat = pymupdf.Rect(x0 * skala - margines, y0 * skala - margines,
+                                         x1 * skala + margines, y1 * skala + margines)
+                strona.add_redact_annot(prostokat, fill=CZARNY)
+                zakryte += 1
+                znalezione.add(ciag)
             strona.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_PIXELS)  # usuwa tekst, zamalowuje piksele
         pdf.set_metadata({})  # autor, program, daty – też mogą zawierać dane osobowe
         pdf.save(cel, garbage=4, deflate=True)
@@ -105,30 +161,13 @@ def _pdf(zrodlo: Path, ciagi: list[str], cel: Path) -> WynikAnonimizacji:
 
 # --- zdjęcia ----------------------------------------------------------------------------------
 
-def _prostokaty_ocr(obraz: bytes, ciagi: list[str]) -> list[tuple[str, tuple[float, float, float, float]]]:
-    """(ciąg, prostokąt w pikselach) dla każdego wystąpienia ciągu w liniach rozpoznanych przez OCR."""
-    wynik = []
-    for slowa in ocr.linie_ze_slowami(obraz):
-        tekst, poczatki = '', []
-        for slowo in slowa:
-            poczatki.append(len(tekst) + (1 if tekst else 0))
-            tekst += (' ' if tekst else '') + slowo[0]
-        for ciag in ciagi:
-            for m in re.finditer(re.escape(ciag), tekst):
-                objete = [s for s, p in zip(slowa, poczatki) if p < m.end() and p + len(s[0]) > m.start()]
-                if objete:
-                    wynik.append((ciag, (min(s[1] for s in objete), min(s[2] for s in objete),
-                                         max(s[3] for s in objete), max(s[4] for s in objete))))
-    return wynik
-
-
 def _obraz(zrodlo: Path, ciagi: list[str], cel: Path) -> WynikAnonimizacji:
     from PIL import Image, ImageDraw
 
     dane = zrodlo.read_bytes()
     obraz = Image.open(io.BytesIO(dane)).convert('RGB')  # nowy obraz – bez metadanych EXIF (np. GPS)
     pedzel = ImageDraw.Draw(obraz)
-    prostokaty = _prostokaty_ocr(dane, ciagi) if ocr.dostepny() else []
+    prostokaty = _lokalizuj(_sekwencja(_linie_ocr(dane)), ciagi) if ocr.dostepny() else []
     for _, (x0, y0, x1, y1) in prostokaty:
         pedzel.rectangle((x0 - MARGINES, y0 - MARGINES, x1 + MARGINES, y1 + MARGINES), fill=CZARNY)
     obraz.save(cel, 'PNG')

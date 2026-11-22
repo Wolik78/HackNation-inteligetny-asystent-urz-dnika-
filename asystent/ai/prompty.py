@@ -5,7 +5,8 @@ SYSTEM_URZEDNIK = (
     'o udostępnienie informacji publicznej (ustawa z dnia 6 września 2001 r. o dostępie do informacji publicznej).'
 )
 
-FORMAT_TYLKO_JSON = 'Odpowiadasz WYŁĄCZNIE poprawnym obiektem JSON – bez komentarzy, bez bloków kodu, bez tekstu przed i po.'
+FORMAT_TYLKO_JSON = ('Odpowiadasz WYŁĄCZNIE poprawnym obiektem JSON – bez komentarzy, bez bloków kodu, '
+                     'bez tekstu przed i po.')
 
 
 def _cytat(tekst: str) -> str:
@@ -81,7 +82,8 @@ def projekt_odpowiedzi(wniosek: str, informacje_wydzialow: str, wzor: str | None
     )
     tresc = f'WNIOSEK:\n{_cytat(wniosek)}\n\nINFORMACJE PRZEKAZANE PRZEZ WYDZIAŁY:\n{_cytat(informacje_wydzialow)}\n\n'
     if wzor:
-        tresc += ('WZÓR PODOBNEJ ODPOWIEDZI Z ARCHIWUM (tylko jako wzór stylu i układu – nie przepisuj z niego danych):\n'
+        tresc += ('WZÓR PODOBNEJ ODPOWIEDZI Z ARCHIWUM '
+                  '(tylko jako wzór stylu i układu – nie przepisuj z niego danych):\n'
                   f'{_cytat(wzor)}\n\n')
     tresc += 'Napisz projekt odpowiedzi.'
     return [
@@ -95,7 +97,8 @@ PISMA_WG_RODZAJU = {
     'przetworzona': (
         'wezwanie do wykazania szczególnie istotnego interesu publicznego',
         'Wyjaśnij, że żądana informacja ma charakter informacji przetworzonej, bo jej przygotowanie wymaga '
-        '[dopasuj do wniosku: zestawienia / analizy / zsumowania danych]. Powołaj art. 3 ust. 1 pkt 1 ustawy o dostępie '
+        '[dopasuj do wniosku: zestawienia / analizy / zsumowania danych]. Powołaj art. 3 ust. 1 pkt 1 ustawy o '
+        'dostępie '
         'do informacji publicznej i wezwij do wykazania, w terminie 14 dni od otrzymania pisma, szczególnie istotnego '
         'interesu publicznego. Uprzedź, że brak odpowiedzi spowoduje wydanie decyzji o odmowie (art. 16).',
     ),

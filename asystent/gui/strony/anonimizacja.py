@@ -159,7 +159,8 @@ async def _zapisz_jako(sciezka: Path) -> None:
         return
     import webview  # dostępne tylko w trybie okna
     wybor = await okno.create_file_dialog(webview.FileDialog.SAVE, save_filename=sciezka.name,
-                                          file_types=(f'Plik {sciezka.suffix.upper().lstrip(".")} (*{sciezka.suffix})',))
+                                          file_types=(f'Plik {sciezka.suffix.upper().lstrip(".")} '
+                                                      f'(*{sciezka.suffix})',))
     if not wybor:
         return
     cel = Path(wybor if isinstance(wybor, str) else wybor[0])

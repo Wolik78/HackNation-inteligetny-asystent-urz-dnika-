@@ -3,7 +3,6 @@
 import asyncio
 import json
 from datetime import date, timedelta
-from pathlib import Path
 
 import httpx
 import pytest
@@ -13,8 +12,8 @@ from asystent.ai import BielikService
 from asystent.archiwum import (RODZAJ_ARCHIWUM, RODZAJ_WNIOSEK, Archiwum, opis_dokumentu, waga_znaczenia)
 from asystent.pliki import Kategoria, MagazynPlikow
 from asystent.pliki.ekstrakcja import wyciagnij_tekst
+from tests.conftest import ARCHIWUM_TESTOWE, WNIOSEK_TESTOWY
 
-DANE = Path(__file__).resolve().parents[1] / 'dane_testowe'
 TEMATY = ('promoc', 'drzew', 'dotac', 'mandat', 'zimow', 'szkol')
 
 
@@ -35,7 +34,7 @@ def model_testowy(zapytania: list[list[str]]) -> httpx.MockTransport:
 @pytest.fixture
 def magazyn(tmp_path) -> MagazynPlikow:
     magazyn = MagazynPlikow(tmp_path / 'dane')
-    for plik in sorted((DANE / 'archiwum').glob('*.txt')):
+    for plik in sorted(ARCHIWUM_TESTOWE.glob('*.txt')):
         magazyn.zapisz(plik.read_bytes(), plik.name, Kategoria.ARCHIWUM)
     return magazyn
 
@@ -53,7 +52,7 @@ def pierwsze_archiwalne(wynik):
 # --- opis dokumentu ---
 
 def test_opis_archiwalnej_odpowiedzi():
-    tekst = (DANE / 'archiwum' / 'UDIP.112.2025_wydatki_na_promocje_miasta_2024.txt').read_text('utf-8')
+    tekst = (ARCHIWUM_TESTOWE / 'UDIP.112.2025_wydatki_na_promocje_miasta_2024.txt').read_text('utf-8')
     temat, nr, data = opis_dokumentu(tekst, 'cokolwiek.txt')
     assert nr == 'UDIP.112.2025'
     assert data == date(2025, 3, 12)
@@ -81,7 +80,7 @@ def test_wlasciwa_sprawa_na_pierwszym_miejscu(magazyn, tmp_path, zapytanie, ocze
 
 
 def test_wniosek_testowy_znajduje_odpowiedz_o_promocji_i_proponuje_ja_jako_wzor(magazyn, tmp_path):
-    wniosek = wyciagnij_tekst(DANE / 'wniosek_test.pdf').tekst
+    wniosek = wyciagnij_tekst(WNIOSEK_TESTOWY).tekst
     wynik = uruchom(archiwum(magazyn, tmp_path).szukaj(wniosek, uzyj_ai=False))
 
     najlepszy = pierwsze_archiwalne(wynik)

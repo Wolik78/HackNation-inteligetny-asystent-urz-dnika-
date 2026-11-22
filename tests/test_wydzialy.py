@@ -1,4 +1,4 @@
-"""Dobór wydziałów: moduł kolegi (program2.py + wydzialy.md) i jego podłączenie do aplikacji – bez prawdziwego modelu."""
+"""Dobór wydziałów: algorytm (dobor_wydzialow.py + wykaz z BIP) i jego podłączenie do aplikacji – bez modelu."""
 
 import asyncio
 import urllib.error
@@ -6,8 +6,8 @@ from datetime import date
 
 import pytest
 
-import program2
 from asystent.ai import DaneSprawy, Intencja, Urzedus, WynikDoboru
+from asystent.ai import dobor_wydzialow as algorytm
 from asystent.ai import wydzialy as dobor
 from asystent.ai.wydzialy import ZRODLO_BIELIK, ZRODLO_RANKING, Propozycja
 
@@ -20,7 +20,7 @@ def skroty(wynik: WynikDoboru) -> list[str]:
 def bez_lm_studio(monkeypatch):
     def brak_polaczenia(*_args, **_kwargs):
         raise urllib.error.URLError('connection refused')
-    monkeypatch.setattr(program2, 'wyslij', brak_polaczenia)
+    monkeypatch.setattr(algorytm, 'wyslij', brak_polaczenia)
 
 
 # --- lista wydziałów z BIP ---
@@ -34,7 +34,7 @@ def test_lista_wydzialow_z_bip_jest_wczytana():
 
 
 def test_brak_pliku_z_wydzialami_nie_wywraca_aplikacji(monkeypatch, tmp_path):
-    monkeypatch.setattr(program2, 'SCIEZKA_WYDZIALOW', str(tmp_path / 'brak.md'))
+    monkeypatch.setattr(algorytm, 'SCIEZKA_WYDZIALOW', str(tmp_path / 'brak.md'))
     dobor.wydzialy.cache_clear()
     try:
         wynik = dobor.dobierz('Ile drzew wycięto?', uzyj_llm=False)
@@ -81,7 +81,7 @@ def test_pusty_tekst():
 # --- z Bielikiem (podstawiona odpowiedź modelu) ---
 
 def test_bielik_wybiera_sposrod_kandydatow(monkeypatch):
-    monkeypatch.setattr(program2, 'wyslij', lambda *_: {
+    monkeypatch.setattr(algorytm, 'wyslij', lambda *_: {
         'wydzialy': [{'skrot': 'WGK', 'uzasadnienie': 'wycinka drzew w parku'}, {'skrot': 'XYZ'}]})
     wynik = dobor.dobierz('Ile drzew wycięto w parku Kochanowskiego?')
     assert wynik.zrodlo == ZRODLO_BIELIK
@@ -90,7 +90,7 @@ def test_bielik_wybiera_sposrod_kandydatow(monkeypatch):
 
 
 def test_lider_rankingu_nie_ginie_gdy_bielik_go_pominie(monkeypatch):
-    monkeypatch.setattr(program2, 'wyslij', lambda *_: {'wydzialy': [{'skrot': 'WIM', 'uzasadnienie': 'inwestycja'}]})
+    monkeypatch.setattr(algorytm, 'wyslij', lambda *_: {'wydzialy': [{'skrot': 'WIM', 'uzasadnienie': 'inwestycja'}]})
     wynik = dobor.dobierz('Ile drzew i krzewów wycięto w parku przy skwerze?')
     assert skroty(wynik)[0] == 'WGK' and 'pominięty przez Bielika' in wynik.propozycje[0].uzasadnienie
 
@@ -103,7 +103,7 @@ def test_bez_lm_studio_wynik_z_rankingu(bez_lm_studio):
 
 
 def test_bledna_odpowiedz_modelu_daje_ranking(monkeypatch):
-    monkeypatch.setattr(program2, 'wyslij', lambda *_: {})
+    monkeypatch.setattr(algorytm, 'wyslij', lambda *_: {})
     wynik = dobor.dobierz('Ile drzew wycięto w parku Kochanowskiego?')
     assert wynik.zrodlo == ZRODLO_RANKING and skroty(wynik)[0] == 'WGK'
 

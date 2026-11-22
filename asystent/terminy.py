@@ -8,7 +8,7 @@
 
 import calendar
 from datetime import date, timedelta
-from functools import lru_cache
+from functools import cache
 
 NAZWY_DNI = ('poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela')
 NAZWY_DNI_KROTKIE = ('pon.', 'wt.', 'śr.', 'czw.', 'pt.', 'sob.', 'niedz.')
@@ -31,7 +31,7 @@ def wielkanoc(rok: int) -> date:
     return date(rok, miesiac, dzien)
 
 
-@lru_cache(maxsize=None)
+@cache
 def swieta(rok: int) -> dict[date, str]:
     """Dni ustawowo wolne od pracy w Polsce."""
     pierwszy_dzien = wielkanoc(rok)

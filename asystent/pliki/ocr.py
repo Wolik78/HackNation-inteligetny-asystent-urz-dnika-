@@ -1,7 +1,7 @@
 """OCR skanów i zdjęć – lokalnie, silnikiem OCR wbudowanym w Windows (język polski, bez pobierania modeli).
 
-To samo podejście co w `program2.py` (Czarek): Windows.Media.Ocr przez `winocr`, strony PDF renderowane
-przez PyMuPDF w 300 DPI. Nic nie wychodzi poza komputer.
+To samo podejście co w doborze wydziałów (`asystent/ai/dobor_wydzialow.py`): Windows.Media.Ocr przez `winocr`,
+strony PDF renderowane przez PyMuPDF w 300 DPI. Nic nie wychodzi poza komputer.
 
 Uwaga: OCR Windows dobrze czyta druk i skany pism; pismo odręczne – słabo. Dlatego tekst z OCR jest
 zawsze oznaczany ostrzeżeniem do sprawdzenia przez urzędnika.
@@ -91,7 +91,7 @@ def strony_pdf_do_ocr(sciezka: Path, numery: list[int]) -> dict[int, str]:
     import pymupdf
 
     wyniki = {}
-    with pymupdf.open(sciezka) as pdf:
+    with pymupdf.open(stream=sciezka.read_bytes(), filetype='pdf') as pdf:
         for nr in numery:
             obraz = pdf[nr].get_pixmap(dpi=DPI).tobytes('png')
             wyniki[nr] = rozpoznaj_obraz(obraz)

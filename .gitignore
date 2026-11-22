@@ -10,24 +10,31 @@ __pycache__/
 # --- NiceGUI (app.storage) ---
 .nicegui/
 
-# --- Sekrety (klucze API do AI online na czas hackathonu) ---
+# --- Sekrety i ustawienia lokalne ---
 .env
 .env.*
 !.env.example
 *.key
 secrets.*
-.claude/settings.local.json
+.claude/
 
 # --- Dane osobowe: wnioski, odpowiedzi, eksporty ---
 # Domyślnie NIE commitujemy żadnych dokumentów – mogą zawierać dane osobowe.
-# Wyjątki: dane testowe od organizatorów (fikcyjne) i prezentacja.
+# Wyjątki: fikcyjne dane testowe i prezentacja.
 *.pdf
 *.doc
 *.docx
 *.odt
 *.rtf
+*.jpg
+*.jpeg
+*.png
+# pisma zapisane z aplikacji („Zapisz .txt/.docx”, anonimizacja) – trafiają tam, gdzie wskaże urzędnik
+Odpowiedz_*.txt
+*_zanonimizowany.*
 !dane_testowe/**
 !prezentacja/**
+!docs/**
 
 # Dane robocze aplikacji (wgrane pliki, archiwum, eksporty, baza)
 dane/

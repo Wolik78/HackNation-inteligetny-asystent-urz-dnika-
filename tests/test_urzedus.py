@@ -259,7 +259,8 @@ def test_dane_osobowe_z_projektu():
     assert set(wynik.dane_osobowe) == {'601 234 567', 'Janie Testowy'}
 
 
-@pytest.mark.parametrize('wiadomosc', ['Sprawdź pismo', 'Zweryfikuj projekt odpowiedzi', 'Czy to pismo jest kompletne?'])
+@pytest.mark.parametrize('wiadomosc', ['Sprawdź pismo', 'Zweryfikuj projekt odpowiedzi', 'Czy to pismo jest '
+                                                                                         'kompletne?'])
 def test_rozpoznanie_kontroli(wiadomosc):
     assert rozpoznaj_lokalnie(wiadomosc) is Intencja.KONTROLA
 

@@ -2,12 +2,13 @@
 
 from datetime import date
 
-from nicegui import ui
+from nicegui import run, ui
 
-from ... import rejestr
-from ...konfiguracja import KATALOG_DANYCH, LLM_LIMIT_ZNAKOW, TERMIN_DNI
+from ...demo import przygotuj_demo
+from ...konfiguracja import EMBED_MODEL, KATALOG_DANYCH, LLM_LIMIT_ZNAKOW, TERMIN_DNI
 from ...terminy import swieta
-from ...uslugi import bielik
+from ...uslugi import bielik, magazyn
+from ..archiwum_widok import zaindeksuj_w_tle
 from ..komponenty import naglowek_strony, otworz_w_systemie, potwierdz
 
 
@@ -18,11 +19,12 @@ def strona_ustawienia() -> None:
         with ui.grid(columns=2).classes('gap-x-6 gap-y-1'):
             for etykieta, wartosc in [('Model', bielik.model), ('Adres serwera', bielik.url),
                                       ('Tekst w jednym zapytaniu', f'do {LLM_LIMIT_ZNAKOW} znaków'),
-                                      ('Temperatura', str(bielik.temperatura))]:
+                                      ('Temperatura', str(bielik.temperatura)),
+                                      ('Model wyszukiwania (Archiwum)', EMBED_MODEL)]:
                 ui.label(etykieta).classes('text-grey-7')
                 ui.label(wartosc)
-        ui.label('Zmiana: zmienne środowiskowe UDIP_LLM_URL, UDIP_LLM_MODEL, UDIP_LLM_LIMIT_ZNAKOW.') \
-            .classes('text-caption text-grey-6')
+        ui.label('Zmiana: zmienne środowiskowe UDIP_LLM_URL, UDIP_LLM_MODEL, UDIP_LLM_LIMIT_ZNAKOW, '
+                 'UDIP_EMBED_MODEL.').classes('text-caption text-grey-6')
 
         async def sprawdz() -> None:
             status = await bielik.status()
@@ -47,16 +49,24 @@ def strona_ustawienia() -> None:
 
         ui.separator().classes('my-2')
         ui.label('Dane demonstracyjne').classes('text-subtitle1 text-weight-medium')
-        ui.label('Odtwarza 10 wniosków testowych z terminami liczonymi od dzisiaj (np. przed pokazem). '
-                 'Wnioski dodane przez Ciebie zostają bez zmian.').classes('text-caption text-grey-7')
+        ui.label('Przygotowuje aplikację do pokazu: odtwarza 10 wniosków testowych z terminami liczonymi od dzisiaj '
+                 'i wgrywa do Bazy wiedzy 11 fikcyjnych archiwalnych odpowiedzi (do wyszukiwania podobnych spraw). '
+                 'Wnioski i dokumenty dodane przez Ciebie zostają bez zmian.').classes('text-caption text-grey-7')
 
-        async def przywroc() -> None:
-            if await potwierdz('Odtworzyć 10 wniosków testowych? Zmiany w obecnych wnioskach testowych przepadną.',
-                               'Odtwórz'):
-                rejestr.przywroc_dane_testowe()
-                ui.notify('Odtworzono wnioski testowe.', type='positive')
+        async def przygotuj() -> None:
+            if not await potwierdz('Wczytać dane demonstracyjne? Zmiany w obecnych wnioskach testowych przepadną.',
+                                   'Wczytaj'):
+                return
+            try:
+                wynik = await run.io_bound(przygotuj_demo, magazyn)
+            except FileNotFoundError as blad:
+                ui.notify(str(blad), type='negative')
+                return
+            zaindeksuj_w_tle()
+            ui.notify(f'Gotowe: wnioski testowe odtworzone, archiwum: +{wynik.nowe} '
+                      f'(już było: {wynik.pominiete}).', type='positive')
 
-        ui.button('Przywróć wnioski testowe', icon='restart_alt', on_click=przywroc).props('outline')
+        ui.button('Wczytaj dane demonstracyjne', icon='restart_alt', on_click=przygotuj).props('outline')
 
         ui.separator().classes('my-2')
         ui.label('Dane').classes('text-subtitle1 text-weight-medium')

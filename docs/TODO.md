@@ -18,7 +18,7 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 - [x] Kontrola jakości pisma: liczby ze źródłami, pominięte dane, kompletność (Z7 – „wykluczyć halucynacje”)
 - [x] Czat Urzęduś z regulacjami zakresu
 - [x] Baza wiedzy: ustawy, zarządzenia, archiwalne odpowiedzi (I1, J6)
-- [x] 252 testy automatyczne, dane testowe w `dane_testowe/`
+- [x] 259 testów automatycznych + linter (ruff), fikcyjne dane testowe w `dane_testowe/` (opis: `dane_testowe/README.md`)
 
 ---
 
@@ -46,7 +46,7 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 - [ ] **Materiały od mentorów (kod QR w dniu startu)** – wgrać wzory wniosków i odpowiedzi, zastąpić nimi dane testowe, sprawdzić całą ścieżkę na nich
   - [ ] sprawdzić OCR na prawdziwych **pismach odręcznych** – OCR Windows czyta je słabo; najwyżej uczciwe ostrzeżenie
 - [ ] P0 **Szybkość Bielika na pokaz** – 👤 przełączyć model na Q4_K_M (sekcja 3), zmierzyć czasy przed i po
-- [x] **Lista wydziałów z BIP + dobór wydziału** (Z6, I4) – moduł kolegi (`program2.py`, `wydzialy.md`) podłączony: nowy wniosek, krok „Wydziały” (wybór z listy BIP), odpowiedzi wydziałów, czat
+- [x] **Lista wydziałów z BIP + dobór wydziału** (Z6, I4) – algorytm kolegi (`asystent/ai/dobor_wydzialow.py`, wykaz `asystent/zasoby/wydzialy.md`) podłączony: nowy wniosek, krok „Wydziały” (wybór z listy BIP), odpowiedzi wydziałów, czat
   - [ ] 👤 kolega: uzupełnić listę o biura (np. komórka od promocji – testowy wniosek o promocję nie ma dziś dobrego dopasowania)
 
 ## 2. Kalendarz wniosków
@@ -66,7 +66,7 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 - [x] P1 Klasyfikacja wniosku i ścieżka postępowania: zwykła / przetworzona / nie jest informacją publiczną / dostępna w BIP / do doprecyzowania → odpowiedź, decyzja odmowna albo prośba o doprecyzowanie
 - [ ] P2 Rozgrzanie modelu przy starcie aplikacji (pierwsze zapytanie jest najwolniejsze)
 - [ ] P2 Odczyt danych z wniosku: wnioskodawca, e-mail/adres do odpowiedzi
-- [x] P2 OCR skanów i zdjęć offline (OCR Windows, jak w `program2.py`) – PDF bez tekstu, JPG/PNG, Word ze zdjęciem
+- [x] P2 OCR skanów i zdjęć offline (OCR Windows, `asystent/pliki/ocr.py`) – PDF bez tekstu, JPG/PNG, Word ze zdjęciem
   - [ ] P2 pismo odręczne – OCR Windows czyta je słabo; sprawdzić na prawdziwych skanach od mentorów
 - [ ] P2 Zawiadomienie o kwerendzie z jednego kliknięcia przy zaznaczeniu kwerendy
 
@@ -120,7 +120,7 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 ## 9. Dzień przed oddaniem – checklista
 
 - [ ] Wszystko zacommitowane i wypchnięte na `main`, kolega na aktualnej wersji
-- [ ] Świeże dane demo (10 wniosków testowych, archiwum, ustawy), wyczyszczone testowe śmieci
+- [ ] Świeże dane demo: Ustawienia → „Wczytaj dane demonstracyjne” (wnioski testowe + archiwum); ustawy w Bazie wiedzy
 - [ ] LM Studio: model załadowany, port 1235, sprawdzone „Sprawdź połączenie”
 - [ ] Laptop: zasilanie, wyłączone powiadomienia i aktualizacje, rozdzielczość do nagrania
 - [ ] Przejście całego scenariusza jury (J1–J6) na czysto, z zegarkiem

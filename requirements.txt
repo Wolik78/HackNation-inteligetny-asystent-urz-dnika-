@@ -1,8 +1,8 @@
 nicegui[native]>=4.0
-pypdf>=5.0
 python-docx>=1.1
 httpx>=0.27
-# OCR skanów i zdjęć (silnik Windows, język polski) – jak w program2.py
+numpy>=1.26
+# PDF (odczyt, zaczernianie) i OCR skanów i zdjęć (silnik Windows, język polski, offline)
 pymupdf>=1.24
 pillow>=10.0
 winocr>=0.0.15; sys_platform == "win32"

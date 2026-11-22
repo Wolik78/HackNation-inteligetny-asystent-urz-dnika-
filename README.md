@@ -1,182 +1,177 @@
-# HackNation-inteligetny-asystent-urz-dnika-
-HackNation 2026 – Inteligentny asystent urzędnika (wnioski UDIP, UM Bydgoszcz)
+# Asystent UDIP
 
-## Uruchomienie
+**Lokalny asystent urzędnika do obsługi wniosków o dostęp do informacji publicznej**
+HackNation 2026 · wyzwanie Urzędu Miasta Bydgoszczy
 
-Najprościej: dwuklik na `uruchom.bat`. Za pierwszym razem tworzy środowisko `.venv`
-i instaluje biblioteki (a potem doinstalowuje je, gdy zmieni się `requirements.txt`), następnie otwiera aplikację w oknie.
+Asystent prowadzi wniosek od wpływu do wysłania odpowiedzi:
+- pilnuje terminów,
+- odczytuje dokumenty, także skany,
+- znajduje podobne sprawy z archiwum,
+- dobiera wydziały,
+- pisze projekt pisma,
+- sprawdza go pod kątem błędów,
+- anonimizuje dane osobowe.
 
-- `uruchom.bat` – aplikacja desktopowa (własne okno Windows, działa lokalnie)
-- `uruchom.bat --web` – to samo w przeglądarce na http://127.0.0.1:8080 (wygodne do debugowania)
+Działa **w całości na komputerze urzędnika**: model językowy Bielik uruchomiony jest lokalnie w LM Studio, a żaden dokument nie opuszcza urzędu. Każdą decyzję podejmuje urzędnik, asystent tylko podpowiada.
 
-**VS Code:** biblioteki są tylko w `.venv`, nie w globalnym Pythonie. Otwórz w VS Code
-folder repozytorium (nie folder nad nim) albo wybierz interpreter ręcznie:
-`Ctrl+Shift+P` → *Python: Select Interpreter* → `.venv\Scripts\python.exe`.
+## Testy jury – gdzie je znaleźć
+
+| Test | Co sprawdza | Gdzie w aplikacji |
+|---|---|---|
+| J1 | podobne sprawy w archiwum | sprawa → krok **Podobne sprawy** (szuka sam) · ekran **Archiwum** |
+| J2 | przygotowanie pisma | sprawa → **Projekt odpowiedzi** (pismo na żywo, właściwe dla rodzaju sprawy) + **kontrola jakości** |
+| J3 | anonimizacja pliku z danymi osobowymi | ekran **Anonimizacja pliku** (PDF, skan, Word, TXT, zdjęcie → plik z czarnymi polami) |
+| J4 | łatwość obsługi | przeciąganie plików, podpowiedzi zamiast formularzy, czat **Urzęduś**, autozapis |
+| J5 | kalendarz i etapy sprawy | ekran **Wnioski** (kolory terminów, widok miesiąca, statusy, kwerenda, przebieg sprawy) |
+| J6 | wgrywanie ustaw i archiwów | ekran **Baza wiedzy** (wiele plików naraz, wykrywanie duplikatów) |
+
+Pliki do sprawdzenia: [`dane_testowe/`](dane_testowe/README.md). Wszystkie są fikcyjne, a w folderze `anonimizacja/` leży wniosek z danymi osobowymi wszystkich typów, w wersji z tekstem i jako skan.
+
+## Szybki start
+
+**Wymagania:**
+- Windows 10/11 z polskim pakietem OCR (jest w polskim Windows),
+- Python 3.11+,
+- [LM Studio](https://lmstudio.ai).
+
+**LM Studio:**
+1. Pobierz model `bielik-4.5b-v3.0-instruct` (wersja **Q4_K_M** mieści się w 4 GB VRAM).
+2. Ustaw Context Length na **3072**.
+3. Włącz *Local Server* na porcie **1235**.
+4. Wbudowany `nomic-embed` wystarczy do wyszukiwania. Wielojęzyczny **bge-m3** wyraźnie poprawia trafność archiwum (zmienna `UDIP_EMBED_MODEL`).
+
+**Aplikacja:**
+1. Kliknij dwukrotnie `uruchom.bat`. Za pierwszym razem plik tworzy środowisko `.venv` i instaluje biblioteki.
+   - `uruchom.bat --web` otwiera to samo w przeglądarce na http://127.0.0.1:8080.
+2. Wejdź w **Ustawienia → Wczytaj dane demonstracyjne**. To dodaje 10 wniosków w kalendarzu i 11 archiwalnych odpowiedzi.
+3. Gdy w nagłówku widać zielone „Bielik lokalnie · offline”, AI jest gotowe.
+
+Bez LM Studio aplikacja też działa. Wyszukiwanie, dobór wydziałów, klasyfikacja i anonimizacja mają wtedy tryb bez AI, a pola wypełnia się ręcznie.
+
+## Funkcje
+
+### Kalendarz wniosków
+- Terminy liczone automatycznie:
+  - 14 dni (art. 13 ust. 1 UDIP),
+  - kwerenda do 2 miesięcy (art. 13 ust. 2),
+  - przesunięcie z weekendu i święta na dzień roboczy (art. 57 § 4 KPA), łącznie z ruchomymi świętami.
+- Kolory pilności, filtry, wyszukiwarka, wybór roku i prowadzącego, widok miesiąca.
+- Statusy zmieniają się same na kolejnych etapach. Każda zmiana trafia do przebiegu sprawy.
+
+### Sprawa krok po kroku
+1. **Wniosek:**
+   - dane wniosku,
+   - **rodzaj sprawy** ze ścieżką postępowania: zwykła, przetworzona, w BIP, nie jest informacją publiczną, inny tryb, do doprecyzowania.
+2. **Podobne sprawy:** archiwalne odpowiedzi i wnioski z ostatniego roku, z procentem trafności. Najlepsza odpowiedź trafia jako wzór pisma.
+3. **Wydziały:** dobór z wykazu 19 wydziałów z BIP, czyli ranking słów kluczowych plus wybór Bielika z uzasadnieniem. Do tego gotowa prośba do wydziału.
+4. **Odpowiedzi wydziałów:** wgrywanie plików od wydziałów.
+5. **Projekt odpowiedzi:**
+   - Bielik pisze pismo na żywo, a jego rodzaj zależy od rodzaju sprawy (np. wezwanie przy informacji przetworzonej),
+   - **kontrola jakości**: każda liczba i data musi mieć źródło w dokumentach, sprawdzana jest forma pisma i odpowiedź na każde żądanie wniosku.
+6. **Anonimizacja:** propozycje danych osobowych. Urzędnik je zatwierdza, eksport je maskuje.
+7. **Eksport:** zapis do `.docx` lub `.txt` i „Oznacz jako wysłane”. Aplikacja niczego sama nie wysyła.
+
+### Anonimizacja pliku (J3)
+- Dane osobowe wykrywane są **bez AI**:
+  - imiona i nazwiska w odmianie,
+  - adresy i kody pocztowe,
+  - PESEL, dowód osobisty, numer konta, NIP, REGON,
+  - telefony, e-maile, daty urodzenia.
+- Bielik dokłada to, czego wzorce nie złapały.
+- Wynik to **plik w tym samym formacie**:
+  - PDF: tekst pod czarnym polem jest usuwany z pliku, a metadane czyszczone,
+  - skan i zdjęcie: zamalowane piksele w miejscach wskazanych przez OCR,
+  - Word: maska w treści, tabelach, nagłówkach i stopkach.
+- Na koniec aplikacja odczytuje plik wynikowy ponownie, także OCR-em, i potwierdza, że ukrytych danych w nim nie ma.
+
+### Dokumenty i OCR
+- Obsługiwane formaty: PDF, DOCX, DOC (przez LibreOffice), TXT, JPG, PNG, do 25 MB.
+- Każdy plik jest sprawdzany po rozszerzeniu i po zawartości.
+- Skany, zdjęcia i Wordy z wklejonym zdjęciem odczytuje OCR wbudowany w Windows: po polsku, offline, około 1 s na stronę. Tekst z OCR jest oznaczony do sprawdzenia, bo pismo odręczne OCR czyta słabo.
+
+### Urzęduś – czat asystenta
+- Pracuje na otwartej sprawie:
+  - streszcza wniosek i odpowiada na pytania o dokumenty,
+  - proponuje wydziały,
+  - pisze prośby, zawiadomienia i wezwania,
+  - sprawdza pismo.
+- Zna przepisy UDIP i odpowiada na pytania o samą aplikację.
+- Zakres jest pilnowany warstwowo:
+  - prośby spoza tematu są odrzucane bez pytania modelu,
+  - polecenia trafiają do zamkniętej listy czynności,
+  - odpowiedzi o przepisach muszą mieć podstawę prawną,
+  - odpowiedzi o sprawie muszą opierać się na jej dokumentach.
+
+## Bezpieczeństwo i RODO
+- **Offline:** model działa lokalnie (LM Studio), a aplikacja łączy się tylko z `localhost`.
+- **Dane** leżą wyłącznie w folderze `dane/`, który jest poza gitem. Można go przenieść, np. na zaszyfrowany dysk: zmienna `UDIP_KATALOG_DANYCH`.
+- **Człowiek decyduje:** propozycje AI są oznaczone i trafiają do sprawy dopiero po zatwierdzeniu.
+- **Pliki** są sprawdzane po sygnaturze, ze zwalidowaną nazwą i z ochroną przed „zip bombą” w DOCX.
+- **Anonimizacja** usuwa dane z pliku, a nie tylko je zakrywa. Czyści też metadane: autora PDF i Worda oraz EXIF zdjęć.
 
 ## Struktura
 
 ```
-GUI.py                    punkt startowy
-program2.py               dobór wydziałów (ranking słów + Bielik) – działa też samodzielnie z terminala
-wydzialy.md               wykaz wydziałów UM Bydgoszczy z BIP: zadania, rejestry
+main.py                     punkt startowy (uruchom.bat → .venv → main.py)
 asystent/
-  konfiguracja.py         ścieżki, limity, terminy
-  rejestr.py              kalendarz wniosków: terminy, statusy, kwerenda, historia (zapis w JSON)
-  terminy.py              dni robocze, święta, liczenie terminów wg art. 57 KPA
-  uslugi.py               wspólne instancje (magazyn plików, klient Bielika, archiwum)
-  archiwum.py             wyszukiwanie podobnych spraw: słowa (TF-IDF) + znaczenie (embeddingi), indeks wektorów
-  klasyfikacja.py         rodzaj sprawy i ścieżka postępowania (zwykła, przetworzona, w BIP, …)
-  anonimizacja.py         dane osobowe bez AI (imiona i nazwiska, adresy, PESEL…), podział tekstu, maskowanie
-  kontrola.py             kontrola jakości pisma bez AI (liczby, daty, forma)
-  stan_sprawy.py          autozapis pracy w sprawie (stan.json w katalogu sprawy)
+  konfiguracja.py           ścieżki, limity, model AI (zmienne UDIP_*)
+  rejestr.py                kalendarz wniosków: terminy, statusy, kwerenda, rodzaj sprawy, historia
+  terminy.py                dni robocze, święta, terminy wg art. 57 KPA
+  archiwum.py               podobne sprawy: wspólne słowa (TF-IDF) + znaczenie (embeddingi), indeks wektorów
+  klasyfikacja.py           rodzaje spraw, ścieżki postępowania, reguły
+  anonimizacja.py           wykrywanie danych osobowych bez AI, maskowanie
+  kontrola.py               kontrola jakości pisma bez AI (liczby, daty, forma)
+  stan_sprawy.py            autozapis pracy w sprawie
+  demo.py                   dane demonstracyjne jednym kliknięciem
+  uslugi.py                 wspólne instancje usług
   ai/
-    bielik_service.py     asynchroniczny klient LM Studio (analiza, dane osobowe, stream pisma)
-    urzedus.py            czat Urzęduś: rozpoznawanie poleceń, regulacje zakresu, czynności
-    wydzialy.py           podłączenie program2.py do aplikacji (lista z BIP, dobór w tle)
-    prompty.py            prompty modułów AI – do strojenia bez ruszania logiki
-    prompty_czatu.py      prompty i ściąga z ustawy dla Urzędusia
-  pliki/                  obsługa plików – bez zależności od GUI
-    walidacja.py          typ, rozmiar, sygnatura pliku, bezpieczna nazwa
-    ekstrakcja.py         tekst z PDF / DOCX / DOC / TXT / zdjęć (OCR)
-    ocr.py                OCR Windows (polski, offline), położenie słów do zaczerniania
-    anonimizacja_pliku.py zanonimizowany plik w tym samym formacie (czarne pola) + kontrola wyniku
-    magazyn.py            lokalne przechowywanie dokumentów + metadane
-    eksport.py            zapis pisma do .docx / .txt
-  gui/
-    aplikacja.py          układ okna, menu, routing
-    czat.py               panel czatu Urzęduś
-    kontekst.py           która sprawa jest otwarta w danym oknie
-    komponenty.py         pole „przeciągnij i upuść”, karta pliku, …
-    strony/               jeden moduł na ekran
-tests/                    testy (pytest)
+    bielik_service.py       asynchroniczny klient LM Studio (analiza, pisma, dane osobowe, embeddingi)
+    dobor_wydzialow.py      algorytm doboru wydziałów (ranking + Bielik); działa też z terminala
+    wydzialy.py             dobór wydziałów w aplikacji (wynik dla GUI i czatu, praca w tle)
+    urzedus.py              czat Urzęduś: rozpoznawanie poleceń, regulacje zakresu, czynności
+    podrecznik.py           podręcznik aplikacji, z którego odpowiada Urzęduś
+    prompty.py, prompty_czatu.py
+  pliki/                    obsługa plików – bez zależności od GUI
+    walidacja.py            typ, rozmiar, sygnatura, bezpieczna nazwa
+    ekstrakcja.py           tekst z PDF / DOCX / DOC / TXT / zdjęć
+    ocr.py                  OCR Windows z położeniem słów
+    anonimizacja_pliku.py   plik z czarnymi polami w tym samym formacie + kontrola wyniku
+    magazyn.py, eksport.py  lokalny magazyn dokumentów, zapis pism
+  gui/                      interfejs (NiceGUI): aplikacja, czat, komponenty, strony/ – jeden moduł na ekran
+  zasoby/wydzialy.md        wykaz wydziałów UM Bydgoszczy z BIP (zadania, rejestry)
+dane_testowe/               fikcyjne dokumenty do pokazu i testów
+docs/TODO.md                plan prac
+tests/                      testy automatyczne (pytest)
 ```
 
-## Asystent AI – lokalny Bielik
+Dobór wydziałów z terminala, np. do strojenia słów kluczowych:
 
-Aplikacja korzysta z modelu **Bielik 4.5B v3.0 Instruct** uruchomionego w **LM Studio** na tym komputerze
-(serwer API zgodny z OpenAI). Żaden tekst nie wychodzi poza komputer.
+```powershell
+.venv\Scripts\python -m asystent.ai.dobor_wydzialow dane_testowe\wnioski --bez-llm
+```
 
-1. W LM Studio załaduj `bielik-4.5b-v3.0-instruct` (Context Length: 3072) i włącz *Local Server* na porcie **1235**.
-2. Uruchom aplikację – w nagłówku pojawi się zielone „Bielik lokalnie · offline”.
+## Konfiguracja (zmienne środowiskowe)
 
-Co robi Bielik:
-- **Nowy wniosek** – po wgraniu pliku sam proponuje skrócony opis, wydziały, rodzaj sprawy i ocenę, czy potrzebna
-  jest kwerenda.
-- **Sprawa → Wydziały** – propozycja wydziałów z uzasadnieniem; listę można poprawić ręcznie (wykaz z BIP).
-- **Sprawa → Projekt odpowiedzi** – pisze projekt pisma na żywo (stream) na podstawie wniosku, odpowiedzi
-  wydziałów i opcjonalnego wzoru z archiwum.
-- **Sprawa → Anonimizacja** – wskazuje dane osób prywatnych (bez urzędników pełniących funkcje publiczne);
-  dodatkowo PESEL, telefony, e-maile i numery kont wykrywane są wzorcami. Urzędnik zatwierdza, eksport je maskuje.
-
-### Podobne sprawy (Archiwum)
-
-Krok „Podobne sprawy” szuka sam po otwarciu sprawy, ekran Archiwum – po wpisaniu tematu. Przeszukiwane są archiwalne
-odpowiedzi z Bazy wiedzy i wnioski z rejestru z ostatniego roku. Trafność (%) łączy:
-- **wspólne słowa** – rdzenie słów ważone rzadkością (TF-IDF), bez urzędowych formułek; działa bez LM Studio,
-- **znaczenie** – embeddingi z LM Studio (`UDIP_EMBED_MODEL`, domyślnie wbudowany nomic-embed). Nomic słabo zna
-  polski, więc ma wagę 25%; model wielojęzyczny (np. **bge-m3**) dostaje 50% i wyraźnie poprawia wyniki.
-Wektory dokumentów liczą się raz (`dane/indeks_archiwum.json`, także w tle po wgraniu archiwum do Bazy wiedzy).
-Najlepsza archiwalna odpowiedź (od 40%) trafia automatycznie jako wzór do „Projektu odpowiedzi”.
-Archiwum testowe (11 fikcyjnych, zanonimizowanych odpowiedzi): `dane_testowe/archiwum/` – wgraj je w Bazie wiedzy.
-
-### Rodzaj sprawy (klasyfikacja)
-
-Bielik przy analizie wniosku wskazuje rodzaj z zamkniętej listy; gdy odpowie „zwykła”, a reguły wyraźnie widzą
-inny rodzaj (np. „w mojej sprawie”, „wszystkich umów z lat…”), wygrywają reguły. Urzędnik zatwierdza (krok 1 sprawy).
-
-| Rodzaj | Ścieżka | Pismo z „Generuj projekt” |
+| Zmienna | Domyślnie | Znaczenie |
 |---|---|---|
-| Informacja publiczna | odpowiedź w 14 dni (art. 13) | odpowiedź z danymi od wydziałów |
-| Informacja przetworzona | art. 3 ust. 1 pkt 1, ew. decyzja (art. 16) | wezwanie do wykazania szczególnie istotnego interesu publicznego |
-| Informacja w BIP | art. 10 ust. 1 | pismo wskazujące BIP |
-| To nie jest informacja publiczna | zwykłe pismo, bez decyzji | pismo informujące |
-| Inny tryb dostępu | art. 1 ust. 2 (np. akta – KPA) | pismo o właściwym trybie |
-| Do doprecyzowania | termin biegnie od doprecyzowania | wezwanie do doprecyzowania |
+| `UDIP_KATALOG_DANYCH` | `dane/` | folder z dokumentami, rejestrem i indeksem |
+| `UDIP_LLM_URL` | `http://localhost:1235/v1` | adres serwera LM Studio |
+| `UDIP_LLM_MODEL` | `bielik-4.5b-v3.0-instruct` | model językowy |
+| `UDIP_LLM_LIMIT_ZNAKOW` | `6000` | najwięcej tekstu w jednym zapytaniu (zmniejszany do okna kontekstu) |
+| `UDIP_EMBED_MODEL` | `text-embedding-nomic-embed-text-v1.5` | model wyszukiwania podobnych spraw |
 
-### Anonimizacja pliku (J3)
-
-Ekran **Anonimizacja pliku**: przeciągnij PDF (także skan), Word, TXT albo zdjęcie → dane osobowe zaznaczają się od razu
-bez AI (imiona i nazwiska w odmianie, adresy, kody pocztowe, PESEL, telefony, e-maile, NIP, REGON, daty urodzenia),
-Bielik dokłada resztę → urzędnik zatwierdza → **plik w tym samym formacie z czarnymi polami**:
-- PDF z tekstem – redakcja PyMuPDF (tekst pod polem jest usuwany z pliku, metadane czyszczone),
-- skan PDF i zdjęcie – czarne prostokąty w miejscach słów wskazanych przez OCR (zdjęcie zapisywane jako PNG bez EXIF),
-- Word – maska w akapitach, tabelach, nagłówkach i stopkach; TXT – maska.
-Na koniec plik wynikowy jest odczytywany ponownie (także OCR-em) i aplikacja potwierdza, że ukrytych danych w nim nie ma.
-
-### Dobór wydziałów (lista z BIP)
-
-Wykaz 19 wydziałów z zadaniami i rejestrami jest w `wydzialy.md`, algorytm w `program2.py`:
-1. **ranking słów** – słowa kluczowe wydziałów + podobieństwo wniosku do opisu zadań (działa bez modelu,
-   od razu po wgraniu pliku); pytania o koszty trafiają też do Wydziału Zarządzania Budżetem Miasta,
-2. **Bielik wybiera** spośród 6 najlepszych kandydatów i podaje uzasadnienie; lider rankingu z wyraźnymi
-   słowami kluczowymi nie zostanie pominięty,
-3. gdy LM Studio jest wyłączone – zostaje wynik rankingu.
-
-Z terminala (np. do strojenia słów kluczowych): `.venv\Scripts\python program2.py <plik lub folder> [--bez-llm]`
-(PDF w tym trybie wymaga `pip install pymupdf`; aplikacja czyta pliki sama i go nie potrzebuje).
-
-### Kontrola jakości pisma (przeciw błędom i halucynacjom AI)
-
-W kroku „Projekt odpowiedzi” przycisk **Sprawdź pismo** (uruchamia się też sam po wygenerowaniu pisma):
-- **liczby i daty** – każda wartość w piśmie jest szukana we wniosku i odpowiedziach wydziałów: zielona ma źródło
-  (podpowiedź pokazuje które), czerwona nie ma pokrycia; różne zapisy tej samej wartości są rozpoznawane
-  (1 240 000 = 1.240.000, 20.11.2026 = 20 listopada 2026); odwołania do przepisów są pomijane,
-- **pominięte dane** – wartości z odpowiedzi wydziałów, których nie ma w piśmie (np. zgubiona kampania),
-- **forma** – pola [UZUPEŁNIĆ], brak podstawy prawnej, zwrotu grzecznościowego, „Z poważaniem”, resztki Markdown,
-  nieukryte dane osobowe,
-- **kompletność (Bielik)** – czy pismo odpowiada na każde żądanie z wniosku; żądanie liczy się jako spełnione tylko,
-  gdy model zacytuje fragment pisma, który naprawdę w nim jest.
-
-Wynik kontroli widać też w kroku „Eksport”, a Urzęduś robi to samo na polecenie „Sprawdź pismo”.
-Kod: `asystent/kontrola.py` (bez AI) i `BielikService.sprawdz_kompletnosc`.
-
-### Urzęduś – czat asystenta
-
-Przycisk **Urzęduś** w nagłówku otwiera panel czatu. Urzęduś wie, która sprawa jest otwarta, i pracuje na jej
-dokumentach: streszcza wniosek, odpowiada na pytania o dokumenty, proponuje wydziały, pisze prośby do wydziałów,
-zawiadomienia o przedłużeniu terminu, prośby o doprecyzowanie i projekt odpowiedzi, szuka danych osobowych,
-pokazuje pilne terminy i wyjaśnia przepisy UDIP. Odpowiada też na pytania o samą aplikację („do czego służy
-Archiwum?”) – z wbudowanego podręcznika (`asystent/ai/podrecznik.py`, aktualizuj go przy zmianach w aplikacji) –
-oraz o siebie i swój zakres obowiązków. Wyniki trafiają do sprawy dopiero po kliknięciu urzędnika
-(„Wstaw do projektu”, „Zapisz w sprawie”, „Oznacz w anonimizacji”).
-
-Regulacje – Urzęduś zajmuje się wyłącznie wnioskami UDIP, pilnowane warstwowo:
-1. prośby o kod, rozrywkę i próby obejścia zasad są odrzucane od razu, bez pytania modelu;
-2. polecenie trafia do jednej z zamkniętej listy czynności (słowa kluczowe, a w razie wątpliwości klasyfikator Bielika);
-3. każdy prompt zawiera reguły zakresu, a dokumenty są podawane jako dane, nie polecenia;
-4. odpowiedź z kodem jest przerywana; o przepisach – pokazywana tylko z podstawą prawną (art.);
-   o sprawie – tylko gdy opiera się na jej dokumentach.
-
-Gdy LM Studio jest wyłączone, aplikacja działa dalej – pola wypełnia się ręcznie, a anonimizacja korzysta z wzorców.
-Ustawienia przez zmienne środowiskowe: `UDIP_LLM_URL` (domyślnie `http://localhost:1235/v1`), `UDIP_LLM_MODEL`,
-`UDIP_LLM_LIMIT_ZNAKOW` (domyślnie 6000; klient sam zmniejsza limit, jeśli okno kontekstu modelu jest mniejsze).
-
-## Obsługa plików
-
-- Wnioski, odpowiedzi wydziałów i dokumenty bazy wiedzy wgrywa się **przeciągając plik na pole** (albo klikając je).
-- Obsługiwane: PDF, DOCX, DOC (wymaga LibreOffice), TXT, zdjęcia JPG/PNG; do 25 MB.
-- Każdy plik jest sprawdzany (rozszerzenie **i** zawartość), a jego tekst odczytywany lokalnie.
-  PDF-y z hasłem są odrzucane z czytelnym komunikatem.
-- **OCR** (`asystent/pliki/ocr.py`): skany PDF (strony bez tekstu), zdjęcia JPG/PNG i Wordy z wklejonym zdjęciem
-  kartki są odczytywane silnikiem OCR wbudowanym w Windows (język polski, offline, ok. 1 s na stronę) –
-  to samo podejście co w `program2.py`. Tekst z OCR dostaje ostrzeżenie „sprawdź z oryginałem”.
-  Druk i skany pism czyta bardzo dobrze, **pismo odręczne – słabo**.
-  Wymaga polskiego pakietu OCR w Windows (jest w polskim Windows; inaczej: Ustawienia → Czas i język → Język →
-  polski → Opcje języka → Rozpoznawanie tekstu). Bez niego aplikacja działa, a skan dostaje tylko ostrzeżenie.
-- Dane leżą wyłącznie na tym komputerze, w folderze `dane/` (poza gitem). Inny folder: zmienna `UDIP_KATALOG_DANYCH`.
-
-```
-dane/
-  przychodzace/                   wgrane, niezatwierdzone wnioski
-  sprawy/<nr>/wniosek|odpowiedzi|eksport/
-  sprawy/<nr>/stan.json           projekt pisma, anonimizacja, wynik kontroli (autozapis)
-  baza_wiedzy/ustawy|zarzadzenia|archiwum/
-  rejestr_wnioskow.json
-```
-
-## Testy
+## Testy i jakość kodu
 
 ```powershell
 .venv\Scripts\python -m pip install -r requirements-dev.txt
 .venv\Scripts\python -m pytest
+.venv\Scripts\python -m ruff check .
 ```
+
+Testy działają bez LM Studio, bo serwer modelu jest podstawiany. Testy OCR są pomijane, gdy w systemie nie ma polskiego pakietu OCR.
+
+## Technologie
+
+Python 3.11, NiceGUI (okno aplikacji przez pywebview), LM Studio + **Bielik 4.5B v3.0 Instruct** (SpeakLeash), PyMuPDF, python-docx, Pillow, winocr (Windows.Media.Ocr), httpx, NumPy, pytest, ruff.
+
+PyMuPDF jest na licencji AGPL. Przy wdrożeniu w urzędzie trzeba to uwzględnić: albo licencja komercyjna, albo wymiana tej części na inną bibliotekę.

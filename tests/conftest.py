@@ -15,6 +15,13 @@ from fpdf import FPDF
 CZCIONKA_TTF = Path(r'C:\Windows\Fonts\arial.ttf')
 TEKST_PL = 'Wniosek o udostępnienie informacji publicznej – zażółć gęślą jaźń'
 
+# Fikcyjne dokumenty z repozytorium (opis: dane_testowe/README.md)
+DANE_TESTOWE = Path(__file__).resolve().parents[1] / 'dane_testowe'
+WNIOSEK_TESTOWY = DANE_TESTOWE / 'wnioski' / 'wniosek_wydatki_na_promocje.pdf'
+ARCHIWUM_TESTOWE = DANE_TESTOWE / 'archiwum'
+WNIOSEK_Z_DANYMI = DANE_TESTOWE / 'anonimizacja' / 'wniosek_z_danymi_osobowymi.pdf'
+WNIOSEK_Z_DANYMI_SKAN = DANE_TESTOWE / 'anonimizacja' / 'wniosek_z_danymi_osobowymi_skan.pdf'
+
 
 def zrob_pdf(tekst: str | None = TEKST_PL, strony: int = 1) -> bytes:
     """PDF z tekstem (z polskimi znakami, jeśli dostępna jest czcionka TTF) albo pusty (jak skan)."""

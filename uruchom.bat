@@ -15,7 +15,7 @@ fc /b requirements.txt ".venv\requirements.zainstalowane" >nul 2>&1 || (
     copy /y requirements.txt ".venv\requirements.zainstalowane" >nul
 )
 
-".venv\Scripts\python" GUI.py %*
+".venv\Scripts\python" main.py %*
 exit /b %errorlevel%
 
 :blad

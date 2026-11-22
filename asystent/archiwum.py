@@ -5,7 +5,7 @@ Szukamy w:
 - wnioskach z bieżącego rejestru z ostatnich 12 miesięcy (I3).
 
 Trafność łączy dwie miary:
-- słowa – wspólne rdzenie słów ważone rzadkością (TF-IDF; `program2.rdzenie` – ta sama normalizacja polskich
+- słowa – wspólne rdzenie słów ważone rzadkością (TF-IDF; `dobor_wydzialow.rdzenie` – ta sama normalizacja polskich
   słów co w doborze wydziałów). Działa zawsze, także bez LM Studio, i to ona niesie wynik: zmierzone na archiwum
   testowym trafia we właściwą sprawę także tam, gdzie model embeddingów się myli,
 - znaczenie – podobieństwo wektorów (embeddingi z LM Studio, model `UDIP_EMBED_MODEL`) – łapie synonimy.
@@ -32,7 +32,7 @@ import numpy as np
 
 from . import rejestr
 from .ai.bielik_service import BielikService, BladAI
-from .ai.wydzialy import program2
+from .ai import dobor_wydzialow as algorytm_wydzialow
 from .konfiguracja import EMBED_MODEL, KATALOG_DANYCH
 from .pliki import Kategoria, MagazynPlikow, ZapisanyPlik
 
@@ -158,17 +158,17 @@ FORMULKI = frozenset({'adres', 'mail', 'email', 'przes', 'odpow', 'podst', 'art'
 
 
 def _rdzenie(tekst: str) -> Counter:
-    return Counter(r for r in program2.rdzenie(tekst) if r not in FORMULKI)
+    return Counter(r for r in algorytm_wydzialow.rdzenie(tekst) if r not in FORMULKI)
 
 
 def _slowa_dokumentu(tekst: str) -> dict[str, str]:
     """{rdzeń: pierwsze słowo z tym rdzeniem w oryginalnej postaci} – żeby pokazać „promocję”, a nie „promo”."""
     slowa = {}
     for slowo in re.findall(r'[^\W\d_]{3,}', tekst):
-        mala = program2.bez_ogonkow(slowo)
-        if mala in program2.STOP:
+        mala = algorytm_wydzialow.bez_ogonkow(slowo)
+        if mala in algorytm_wydzialow.STOP:
             continue
-        slowa.setdefault(program2.rdzen(mala), slowo.lower())
+        slowa.setdefault(algorytm_wydzialow.rdzen(mala), slowo.lower())
     return slowa
 
 
@@ -288,10 +288,10 @@ class Archiwum:
         klucze = [hashlib.sha256(f'{self.model}\n{t}'.encode()).hexdigest() for t in teksty]
         async with self._blokada:  # dwa okna naraz nie liczą tych samych wektorów
             indeks = self._wczytaj_indeks()
-            brakujace = [(k, t) for k, t in dict(zip(klucze, teksty)).items() if k not in indeks]
+            brakujace = [(k, t) for k, t in dict(zip(klucze, teksty, strict=True)).items() if k not in indeks]
             if brakujace:
                 nowe = await self.bielik.osadz([t for _, t in brakujace], self.model)
-                indeks.update({k: [round(x, 6) for x in w] for (k, _), w in zip(brakujace, nowe)})
+                indeks.update({k: [round(x, 6) for x in w] for (k, _), w in zip(brakujace, nowe, strict=True)})
                 self._zapisz_indeks(indeks)
         macierz = np.array([indeks[k] for k in klucze], dtype=float)
         return macierz / np.clip(np.linalg.norm(macierz, axis=1, keepdims=True), 1e-12, None)

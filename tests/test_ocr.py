@@ -8,9 +8,10 @@ import pytest
 from asystent.pliki import BladPliku, wyciagnij_tekst
 from asystent.pliki import ocr
 from asystent.pliki.walidacja import sprawdz_plik
+from tests.conftest import WNIOSEK_TESTOWY
 
 pymupdf = pytest.importorskip('pymupdf')
-WNIOSEK = Path(__file__).resolve().parents[1] / 'dane_testowe' / 'wniosek_test.pdf'
+WNIOSEK = WNIOSEK_TESTOWY
 z_ocr = pytest.mark.skipif(not ocr.dostepny(), reason='OCR Windows z językiem polskim niedostępny')
 
 

@@ -151,7 +151,8 @@ def strona_nowy_wniosek() -> None:
                     if dobor is not None:
                         _propozycje_wydzialow(dobor)
                     if analiza and analiza.czy_wymaga_kwerendy:
-                        ui.label('Bielik sugeruje kwerendę – zaznaczono pole powyżej.').classes('text-caption text-grey-8')
+                        ui.label('Bielik sugeruje kwerendę – zaznaczono pole powyżej.').classes('text-caption '
+                                                                                                'text-grey-8')
 
             podpowiedz()
             with ui.row().classes('w-full justify-end'):

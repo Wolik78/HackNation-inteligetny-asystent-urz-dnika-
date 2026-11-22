@@ -2,9 +2,21 @@
 
 from collections.abc import Callable
 
-from nicegui import ui
+from nicegui import background_tasks, ui
 
+from ..ai import BladAI
 from ..archiwum import RODZAJ_ARCHIWUM, Dokument, Trafienie, WynikWyszukiwania
+from ..uslugi import archiwum
+
+
+def zaindeksuj_w_tle() -> None:
+    """Liczy w tle wektory nowych archiwalnych odpowiedzi – pierwsze wyszukiwanie nie będzie na nie czekać."""
+    async def indeksuj() -> None:
+        try:
+            await archiwum.zaindeksuj()
+        except BladAI:
+            pass  # LM Studio wyłączone – wektory policzą się przy wyszukiwaniu (do tego czasu szukamy po słowach)
+    background_tasks.create(indeksuj(), name='indeks archiwum')
 
 
 def kolor_trafnosci(procent: int) -> str:
@@ -50,8 +62,9 @@ def karta_trafienia(trafienie: Trafienie, *, na_wzor: Callable[[Trafienie], None
                             ui.badge(slowo, color='blue-1', text_color='blue-9').props('rounded')
             with ui.column().classes('items-end gap-1 shrink-0'):
                 with ui.row().classes('items-center no-wrap gap-2'):
-                    ui.linear_progress(trafienie.procent / 100, show_value=False, color=kolor_trafnosci(trafienie.procent)) \
-                        .classes('w-28').props('rounded size=8px')
+                    pasek = ui.linear_progress(trafienie.procent / 100, show_value=False,
+                                               color=kolor_trafnosci(trafienie.procent))
+                    pasek.classes('w-28').props('rounded size=8px')
                     ui.label(f'{trafienie.procent}%').classes('text-weight-medium w-10 text-right')
                 with ui.row().classes('gap-1 no-wrap'):
                     ui.button('Podgląd', icon='visibility', on_click=lambda: podglad_dokumentu(d)).props('flat dense')

@@ -103,7 +103,8 @@ O_SOBIE = (
     'Niczego nie wysyłam ani nie zmieniam sam – ostateczna decyzja zawsze należy do Ciebie. '
     'Nie zajmuję się tematami spoza pracy z wnioskami, np. programowaniem.'
 )
-POWITANIE_KROTKIE = 'Cześć! W czym mogę pomóc? Mogę np. streścić wniosek, sprawdzić terminy albo wyjaśnić, jak działa aplikacja.'
+POWITANIE_KROTKIE = ('Cześć! W czym mogę pomóc? Mogę np. streścić wniosek, sprawdzić terminy albo wyjaśnić, '
+                     'jak działa aplikacja.')
 PODZIEKOWANIE = 'Proszę bardzo! Gdybyś czegoś potrzebował przy wnioskach, jestem tutaj.'
 
 ODMOWA = (
@@ -115,7 +116,8 @@ NIE_WIEM_O_APLIKACJI = (
     'Nie jestem pewien, o którą część aplikacji pytasz. Mogę opowiedzieć o ekranach: Wnioski, Nowy wniosek, '
     'Archiwum, Baza wiedzy, Ustawienia, a także o krokach sprawy – np. Projekt odpowiedzi, Anonimizacja, Eksport.'
 )
-BRAK_W_DOKUMENTACH = 'W dokumentach tej sprawy nie znalazłem odpowiedzi. Odpowiadam tylko na podstawie dokumentów sprawy.'
+BRAK_W_DOKUMENTACH = ('W dokumentach tej sprawy nie znalazłem odpowiedzi. '
+                      'Odpowiadam tylko na podstawie dokumentów sprawy.')
 BRAK_PODSTAWY_PRAWNEJ = (
     'Na to pytanie nie odpowiem – o przepisach mówię tylko wtedy, gdy mogę wskazać konkretny artykuł ustawy '
     'o dostępie do informacji publicznej. Zapytaj inaczej albo sprawdź w ustawie.'
@@ -476,7 +478,8 @@ class Urzedus:
     async def _dane_osobowe(self, sprawa: DaneSprawy) -> Wynik:
         zrodlo, tekst = ('projekt', sprawa.projekt) if sprawa.projekt.strip() else ('wniosek', sprawa.tekst_wniosku)
         if not tekst.strip():
-            return Wynik(Intencja.DANE_OSOBOWE, tekst='Nie ma jeszcze projektu odpowiedzi ani pliku wniosku do sprawdzenia.')
+            return Wynik(Intencja.DANE_OSOBOWE, tekst='Nie ma jeszcze projektu odpowiedzi ani pliku wniosku do '
+                                                      'sprawdzenia.')
         znalezione = list(wykryj_wzorce(tekst))
         for ciag in await self.bielik.wykryj_dane_osobowe(tekst):
             if ciag not in znalezione:

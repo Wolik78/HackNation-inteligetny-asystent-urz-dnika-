@@ -50,7 +50,8 @@ SEKCJE = (
         'Otwarta sprawa ma 7 kroków: 1. Wniosek – dane i treść wniosku; 2. Podobne sprawy z archiwum; '
         '3. Wydziały – propozycja z wykazu wydziałów w BIP (możesz ją poprawić) i gotowa prośba do skopiowania; '
         '4. Odpowiedzi wydziałów – tu wgrywasz pliki od wydziałów; 5. Projekt odpowiedzi; 6. Anonimizacja; '
-        '7. Eksport. Między krokami przechodzisz przyciskami „Dalej”/„Wstecz” albo klikając nazwę kroku. Praca w sprawie (projekt pisma, anonimizacja, '
+        '7. Eksport. Między krokami przechodzisz przyciskami „Dalej”/„Wstecz” albo klikając nazwę kroku. Praca w '
+        'sprawie (projekt pisma, anonimizacja, '
         'kontrola jakości) zapisuje się automatycznie – po powrocie albo ponownym uruchomieniu aplikacji wszystko '
         'na Ciebie czeka.'
     )),
@@ -64,19 +65,21 @@ SEKCJE = (
                                 'czerwon liczb'), (
         'Kontrola jakości jest w kroku „Projekt odpowiedzi” (przycisk „Sprawdź pismo”, uruchamia się też sama po '
         'wygenerowaniu pisma). Każda kwota, data i liczba w piśmie jest szukana we wniosku i odpowiedziach wydziałów: '
-        'zielona ma źródło (najedź, żeby zobaczyć które), czerwona nie ma pokrycia – to może być błąd albo halucynacja AI. '
+        'zielona ma źródło (najedź, żeby zobaczyć które), czerwona nie ma pokrycia – to może być błąd albo halucynacja '
+        'AI. '
         'Kontrola wskazuje też pola [UZUPEŁNIĆ], nieukryte dane osobowe i braki w formie pisma, a Bielik sprawdza, '
         'czy pismo odpowiada na każde żądanie wnioskodawcy. Stan kontroli widać też w kroku „Eksport”.'
     )),
     Sekcja('Archiwum', ('archiwum', 'archiwaln', 'wyszukiw', 'szukaj', 'podobn'), (
         'Archiwum odpowiedzi służy do wyszukiwania podobnych spraw – żeby nie pisać odpowiedzi od zera, tylko '
         'skorzystać z tego, co urząd już kiedyś odpowiedział. Szuka w archiwalnych odpowiedziach z Bazy wiedzy '
-        'i we wnioskach z rejestru z ostatniego roku, po wspólnych słowach i po znaczeniu; trafność widać w procentach. '
+        'i we wnioskach z rejestru z ostatniego roku, po wspólnych słowach i po znaczeniu; trafność widać w '
+        'procentach. '
         'W sprawie podobne sprawy szukają się same (krok 2), a najlepsza archiwalna odpowiedź od razu trafia jako wzór '
         'do kroku „Projekt odpowiedzi” – możesz go zmienić. Na ekranie Archiwum wpisz temat albo fragment wniosku.'
     )),
-    Sekcja('Rodzaj sprawy', ('rodzaj sprawy', 'rodzaj', 'klasyfik', 'sklasyfik', 'przetworzon', 'sciezk', 'bip', 'nie jest informacj',
-                             'interes publiczn', 'odmow', 'inny tryb'), (
+    Sekcja('Rodzaj sprawy', ('rodzaj sprawy', 'rodzaj', 'klasyfik', 'sklasyfik', 'przetworzon', 'sciezk', 'bip',
+                             'nie jest informacj', 'interes publiczn', 'odmow', 'inny tryb'), (
         'Rodzaj sprawy (krok 1 sprawy, także przy rejestracji wniosku) to klasyfikacja wniosku: zwykła informacja '
         'publiczna, informacja przetworzona, informacja dostępna w BIP, to nie jest informacja publiczna, inny tryb '
         'dostępu albo wniosek do doprecyzowania. Podpowiada go Bielik (a gdy nie odpowie – reguły), Ty zatwierdzasz. '
@@ -101,7 +104,8 @@ SEKCJE = (
     Sekcja('Anonimizacja', ('anonimiz', 'dane osobow', 'zaczern', 'ukry', 'rodo', 'maskow'), (
         'Anonimizacja (krok 6): kliknij „Wykryj dane osobowe” – od razu, bez AI, zaznaczą się imiona i nazwiska, '
         'adresy, PESEL, telefony, e-maile i numery kont, a Bielik dołoży to, czego wzorce nie złapały. Dowolny plik '
-        'zanonimizujesz na ekranie „Anonimizacja pliku”. Szare pola to propozycje; kliknięcie zaczernia fragment (ukryje go), '
+        'zanonimizujesz na ekranie „Anonimizacja pliku”. Szare pola to propozycje; kliknięcie zaczernia fragment '
+        '(ukryje go), '
         'ponowne kliknięcie odkrywa. Możesz zatwierdzić wszystko naraz albo dopisać własny fragment. '
         'W eksporcie zatwierdzone fragmenty zostaną zastąpione znakami ██████.'
     )),
@@ -111,11 +115,14 @@ SEKCJE = (
         'w oknie aplikacji wybierasz miejsce zapisu, a kopia zostaje w dokumentach sprawy („Otwórz folder sprawy”). '
         'Aplikacja niczego nie wysyła – pismo wysyłasz sam.'
     )),
-    Sekcja('Ustawienia', ('ustawien', 'konfigur', 'polaczen', 'adres', 'model', 'katalog', 'folder danych'), (
+    Sekcja('Ustawienia', ('ustawien', 'konfigur', 'polaczen', 'adres', 'model', 'katalog', 'folder danych',
+                          'demo', 'dane testow', 'pokaz'), (
         'Ustawienia pokazują, z jakim modelem i pod jakim adresem łączy się aplikacja (przycisk „Sprawdź połączenie”), '
-        'terminy ustawowe oraz folder, w którym lokalnie przechowywane są wszystkie dokumenty.'
+        'terminy ustawowe oraz folder, w którym lokalnie przechowywane są wszystkie dokumenty. Przycisk „Wczytaj dane '
+        'demonstracyjne” przygotowuje pokaz: 10 wniosków testowych w kalendarzu i archiwum przykładowych odpowiedzi.'
     )),
-    Sekcja('Bielik i bezpieczeństwo', ('bielik', 'lm studio', 'offline', 'lokaln', 'bezpiecz', 'internet', 'dane wychodz',
+    Sekcja('Bielik i bezpieczeństwo', ('bielik', 'lm studio', 'offline', 'lokaln', 'bezpiecz', 'internet', 'dane '
+                                                                                                           'wychodz',
                                        'zielon', 'czerwon', 'niedostepn'), (
         'Asystent korzysta z modelu Bielik uruchomionego lokalnie w LM Studio – żaden dokument nie opuszcza tego '
         'komputera. Zielona etykieta w prawym górnym rogu oznacza, że Bielik działa; czerwona – że LM Studio jest '

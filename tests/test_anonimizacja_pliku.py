@@ -7,9 +7,10 @@ import pytest
 from asystent.anonimizacja import MASKA, wykryj_wzorce
 from asystent.pliki import ocr, wyciagnij_tekst
 from asystent.pliki.anonimizacja_pliku import zanonimizuj_plik
+from tests.conftest import WNIOSEK_TESTOWY, WNIOSEK_Z_DANYMI, WNIOSEK_Z_DANYMI_SKAN
 
 pymupdf = pytest.importorskip('pymupdf')
-WNIOSEK = Path(__file__).resolve().parents[1] / 'dane_testowe' / 'wniosek_test.pdf'
+WNIOSEK = WNIOSEK_TESTOWY
 DANE = ('Jan Testowy', 'ul. Przykładowa 12/4', '85-001 Bydgoszcz', '601 234 567', 'jan.testowy@example.com')
 z_ocr = pytest.mark.skipif(not ocr.dostepny(), reason='OCR Windows z językiem polskim niedostępny')
 
@@ -77,3 +78,20 @@ def test_txt(tmp_path):
 def test_dane_ktorych_nie_ma_w_pliku_sa_zglaszane(tmp_path):
     wynik = zanonimizuj_plik(WNIOSEK, {'Jan Testowy', 'Ktoś Spoza Pliku'}, tmp_path / 'wynik')
     assert wynik.nieznalezione == ['Ktoś Spoza Pliku'] and not wynik.bezpieczny
+
+
+TYPY_W_PLIKU_TESTOWYM = {'PESEL', 'E-mail', 'Telefon', 'Nr konta', 'Dowód osobisty', 'NIP', 'Data urodzenia', 'Adres',
+                         'Kod pocztowy i miejscowość', 'Imię i nazwisko'}
+
+
+@pytest.mark.parametrize('plik', [
+    WNIOSEK_Z_DANYMI,
+    pytest.param(WNIOSEK_Z_DANYMI_SKAN, marks=z_ocr),
+])
+def test_plik_testowy_z_danymi_osobowymi(tmp_path, plik):
+    """Plik dla jury (J3): twarde spacje, dane przełamane między liniami, metadane autora – wszystko ukryte."""
+    wykryte = wykryj_wzorce(wyciagnij_tekst(plik).tekst)
+    assert set(wykryte.values()) == TYPY_W_PLIKU_TESTOWYM
+    wynik = zanonimizuj_plik(plik, wykryte, tmp_path / 'wynik')
+    assert wynik.bezpieczny, (wynik.nieznalezione, wynik.pozostale)
+    assert 'dodatek mieszkaniowy' in wyciagnij_tekst(wynik.sciezka).tekst

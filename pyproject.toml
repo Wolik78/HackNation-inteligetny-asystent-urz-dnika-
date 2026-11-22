@@ -1,3 +1,23 @@
+[project]
+name = "asystent-udip"
+version = "1.0.0"
+description = "Asystent UDIP – lokalny asystent urzędnika do obsługi wniosków o dostęp do informacji publicznej (HackNation 2026, UM Bydgoszcz)"
+readme = "README.md"
+requires-python = ">=3.11"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["asystent/ai/dobor_wydzialow.py"]  # moduł w stylu autora (podwójne cudzysłowy, długie wzorce)
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+ignore = [
+    "E402",   # conftest ustawia folder danych przed importem pakietu
+    "E731",   # krótkie lambdy jako warunki w GUI
+    "B008",   # wywołania w wartościach domyślnych (Timeout httpx)
+]

@@ -1,12 +1,15 @@
 """
 Przydzielanie wniosku (.pdf / .docx / .txt / zdjęcie) do wydziałów Urzędu Miasta Bydgoszczy.
 
+W aplikacji moduł jest używany przez `asystent/ai/wydzialy.py` (tekst wniosku czyta aplikacja). Działa też
+samodzielnie z terminala – do sprawdzania i strojenia słów kluczowych na wielu wnioskach naraz.
+
 Jak to działa:
   0. Tekst: z .docx / .pdf / .txt. Gdy strona PDF nie ma tekstu (zdjęcie / skan kartki),
      albo plik jest zdjęciem (.jpg, .png ...), albo w .docx wklejono zdjęcie,
      tekst jest odczytywany lokalnie przez OCR: wbudowany OCR Windows (język polski),
      a gdy niedostępny - EasyOCR (bez internetu po pierwszym pobraniu modeli).
-  1. Opisy wydziałów (zadania + rejestry) są czytane z wydzialy.md.
+  1. Opisy wydziałów (zadania + rejestry) są czytane z asystent/zasoby/wydzialy.md (wykaz z BIP).
   2. Python liczy dopasowanie słów wniosku do zadań każdego wydziału
      (słowa kluczowe + "rdzenie" słów z wagą rzadkości) i wybiera kilku kandydatów.
      Niektóre wydziały mają WARUNEK KONIECZNY (np. WZP tylko przy zamówieniu publicznym,
@@ -15,13 +18,13 @@ Jak to działa:
      wydział(y), do których trzeba przesłać wniosek, z krótkim uzasadnieniem.
      Gdy LM Studio nie działa (albo podano --bez-llm), wynik to sam ranking.
 
-Użycie:  py program2.py                 -> wszystkie wnioski z folderu programu
-         py program2.py wniosek.pdf     -> jeden plik (pdf, docx, txt, jpg, png...)
-         py program2.py C:\\folder       -> wszystkie wnioski z folderu
-         py program2.py plik.pdf --bez-llm
-Wymaga:  pip install pymupdf python-docx pillow winocr   (winocr: OCR na Windowsie;
-         na Linux/Mac zamiast niego: pip install easyocr)
-         Plik wydzialy.md w tym samym folderze. program1.py NIE jest potrzebny.
+Użycie (z folderu repozytorium):
+         .venv\\Scripts\\python -m asystent.ai.dobor_wydzialow                -> wnioski z bieżącego folderu
+         .venv\\Scripts\\python -m asystent.ai.dobor_wydzialow wniosek.pdf    -> jeden plik (pdf, docx, txt, jpg...)
+         .venv\\Scripts\\python -m asystent.ai.dobor_wydzialow C:\\folder      -> wszystkie wnioski z folderu
+         .venv\\Scripts\\python -m asystent.ai.dobor_wydzialow plik.pdf --bez-llm
+Wymaga bibliotek z requirements.txt (pymupdf, python-docx, pillow, winocr – OCR na Windowsie;
+na Linux/Mac zamiast winocr: pip install easyocr).
 """
 import json
 import math
@@ -41,7 +44,7 @@ KATALOG = os.path.dirname(os.path.abspath(__file__))
 # te same zmienne co w aplikacji (asystent/konfiguracja.py), żeby oba programy łączyły się z tym samym Bielikiem
 LMSTUDIO_URL = os.environ.get("UDIP_LLM_URL", "http://localhost:1235/v1").rstrip("/") + "/chat/completions"
 MODEL = os.environ.get("UDIP_LLM_MODEL", "bielik-4.5b-v3.0-instruct")
-SCIEZKA_WYDZIALOW = os.path.join(KATALOG, "wydzialy.md")
+SCIEZKA_WYDZIALOW = os.path.join(os.path.dirname(KATALOG), "zasoby", "wydzialy.md")
 ROZSZERZENIA_ZDJEC = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp")
 ROZSZERZENIA = (".docx", ".pdf", ".txt") + ROZSZERZENIA_ZDJEC
 MIN_ZNAKOW_TEKSTU = 40        # strona PDF z mniejszą ilością tekstu = zdjęcie -> OCR
@@ -530,7 +533,7 @@ def przydziel(plik, wydzialy, uzyj_llm=True):
 def main():
     argumenty = [a for a in sys.argv[1:] if not a.startswith("--")]
     uzyj_llm = "--bez-llm" not in sys.argv
-    cel = argumenty[0] if argumenty else KATALOG
+    cel = argumenty[0] if argumenty else os.getcwd()
     if os.path.isdir(cel):
         pliki = pliki_w_folderze(cel)
     elif os.path.exists(cel):

@@ -19,7 +19,7 @@ from ...rejestr import Wniosek
 from ...uslugi import archiwum, bielik, magazyn
 from ..anonimizacja_widok import PanelAnonimizacji
 from ..archiwum_widok import karta_trafienia, opis_trybu
-from ..komponenty import (WgranePliki, blad_ai, karta_pliku, naglowek_strony, odmiana, otworz_w_systemie,
+from ..komponenty import (WgranePliki, blad_ai, karta_pliku, odmiana, otworz_w_systemie,
                           potwierdz, strefa_wgrywania, wskaznik_postepu, zapisz_wgrane)
 from ..kontekst import biezacy
 from .wnioski import KOLOR_STATUSU
@@ -119,7 +119,8 @@ def _rodzaj_sprawy(w: Wniosek, po_zmianie: Callable[[], None]) -> None:
                         ui.icon(rodzaj.ikona, color=rodzaj.kolor)
                         ui.label('Ścieżka postępowania').classes('text-weight-medium')
                     ui.label(rodzaj.sciezka).classes('text-body2')
-                    ui.label(f'„Generuj projekt” w kroku 5 przygotuje: {rodzaj.pismo}.').classes('text-caption text-grey-7')
+                    ui.label(f'„Generuj projekt” w kroku 5 przygotuje: {rodzaj.pismo}.').classes('text-caption '
+                                                                                                 'text-grey-7')
                     if w.uzasadnienie_rodzaju:
                         ui.label(f'Podpowiedź asystenta: {w.uzasadnienie_rodzaju}').classes('text-caption text-grey-7')
 
@@ -318,7 +319,8 @@ def _krok_projekt(w: Wniosek, stan: dict) -> Odswiezacz:
 
     async def generuj() -> None:
         odpowiedzi = magazyn.lista(Kategoria.ODPOWIEDZ_WYDZIALU, sprawa=w.nr)
-        zwykla = w.rodzaj == klasyfikacja.DOMYSLNY  # pozostałe rodzaje: wezwanie / pismo informujące, bez danych wydziałów
+        # pozostałe rodzaje sprawy: wezwanie / pismo informujące – bez danych od wydziałów
+        zwykla = w.rodzaj == klasyfikacja.DOMYSLNY
         if zwykla and not odpowiedzi:
             ui.notify('Brak odpowiedzi wydziałów – Bielik wstawi pola [UZUPEŁNIĆ].', type='warning')
         if stan['projekt'].strip() and stan['projekt'] != stan['szablon'] \
@@ -533,9 +535,11 @@ def _stan_kontroli(stan: dict) -> None:
     kompletnosc = stan.get('kompletnosc')
     braki = [z for z in kompletnosc if not z.odpowiedziano] if isinstance(kompletnosc, list) else []
     if wynik is None:
-        kolor, ikona, tekst = 'orange-9', 'warning_amber', 'Nie uruchomiono kontroli jakości – zrób to w kroku „Projekt odpowiedzi”.'
+        kolor, ikona = 'orange-9', 'warning_amber'
+        tekst = 'Nie uruchomiono kontroli jakości – zrób to w kroku „Projekt odpowiedzi”.'
     elif stan.get('kontrola_tekst') != stan['projekt']:
-        kolor, ikona, tekst = 'orange-9', 'update', 'Pismo zmieniło się od ostatniej kontroli jakości – sprawdź je ponownie.'
+        kolor, ikona = 'orange-9', 'update'
+        tekst = 'Pismo zmieniło się od ostatniej kontroli jakości – sprawdź je ponownie.'
     elif wynik.bledy or braki:
         kolor, ikona = 'red-8', 'error_outline'
         tekst = (f'Kontrola jakości: {odmiana(len(wynik.bledy), "problem", "problemy", "problemów")} do poprawy'
