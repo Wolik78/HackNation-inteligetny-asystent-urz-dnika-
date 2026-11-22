@@ -1,4 +1,4 @@
-"""Asystent UDIP – punkt startowy aplikacji.
+"""Cyfrowy Ratusz – punkt startowy aplikacji.
 
 Uruchomienie:
     uruchom.bat            -> okno aplikacji (domyślnie)

@@ -9,14 +9,16 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from nicegui import app, run, ui
+from nicegui import run, ui
 
+from ... import dziennik
 from ...konfiguracja import KATALOG_DANYCH
 from ...pliki import BladPliku, wyciagnij_tekst
-from ...pliki.anonimizacja_pliku import WynikAnonimizacji, zanonimizuj_plik
+from ...pliki.anonimizacja_pliku import WynikAnonimizacji, WynikWsadowy, zanonimizuj_plik, zanonimizuj_wsadowo
 from ...pliki.walidacja import bezpieczna_nazwa, sprawdz_plik
 from ..anonimizacja_widok import PanelAnonimizacji
-from ..komponenty import WgranePliki, naglowek_strony, odmiana, otworz_w_systemie, strefa_wgrywania
+from ..komponenty import (WgranePliki, naglowek_strony, odmiana, otworz_w_systemie, strefa_wgrywania,
+                          zapisz_jako)
 
 KATALOG = KATALOG_DANYCH / 'anonimizacja'
 
@@ -66,6 +68,10 @@ def strona_anonimizacja() -> None:
                                                stan['plik'].parent / 'wynik')
         finally:
             przycisk_zapisz.props(remove='loading')
+        wynik: WynikAnonimizacji = stan['wynik']
+        dziennik.zapisz('Anonimizacja pliku – zatwierdzono dane do ukrycia', kto=dziennik.URZEDNIK, szczegoly=(
+            f'{stan["plik"].suffix}; ukryte dane: {len(stan["ukryte"])}; zaczernione miejsca: {wynik.zakryte}; '
+            f'kontrola: {"OK" if wynik.bezpieczny else "do sprawdzenia"}'))
         wynik_widok.refresh()
 
     async def wyczysc() -> None:
@@ -121,6 +127,8 @@ def strona_anonimizacja() -> None:
                                       'z zaznaczonymi danymi osobowymi.',
                                       po_zmianie=lambda: (stan.update(wynik=None), wynik_widok.refresh()))
 
+    _tryb_wsadowy()
+
 
 async def _potwierdz_bez_ukrycia() -> bool:
     with ui.dialog() as dialog, ui.card():
@@ -146,23 +154,98 @@ def _podsumowanie(wynik: WynikAnonimizacji) -> None:
         ui.label(uwaga).classes('text-caption text-orange-9')
     ui.label(wynik.sciezka.name).classes('text-caption text-grey-8')
     with ui.row().classes('gap-1'):
-        ui.button('Zapisz jako…', icon='save_alt', on_click=lambda: _zapisz_jako(wynik.sciezka))
+        ui.button('Zapisz jako…', icon='save_alt', on_click=lambda: zapisz_jako(wynik.sciezka))
         ui.button('Otwórz', icon='open_in_new', on_click=lambda: otworz_w_systemie(wynik.sciezka)).props('flat')
         ui.button('Folder', icon='folder_open', on_click=lambda: otworz_w_systemie(wynik.sciezka.parent)) \
             .props('flat')
 
 
-async def _zapisz_jako(sciezka: Path) -> None:
-    okno = app.native.main_window
-    if okno is None:  # tryb przeglądarki
-        ui.download.file(sciezka, sciezka.name)
-        return
-    import webview  # dostępne tylko w trybie okna
-    wybor = await okno.create_file_dialog(webview.FileDialog.SAVE, save_filename=sciezka.name,
-                                          file_types=(f'Plik {sciezka.suffix.upper().lstrip(".")} '
-                                                      f'(*{sciezka.suffix})',))
-    if not wybor:
-        return
-    cel = Path(wybor if isinstance(wybor, str) else wybor[0])
-    await run.io_bound(shutil.copyfile, sciezka, cel.with_suffix(sciezka.suffix))
-    ui.notify(f'Zapisano: {cel.with_suffix(sciezka.suffix)}', type='positive')
+# --- wiele plików naraz ---------------------------------------------------------------------
+
+KOLUMNY_WSADOWE = [
+    {'name': 'nazwa', 'label': 'Plik', 'field': 'nazwa', 'align': 'left'},
+    {'name': 'wykryte', 'label': 'Wykryte dane', 'field': 'wykryte', 'align': 'right'},
+    {'name': 'zakryte', 'label': 'Zaczernione miejsca', 'field': 'zakryte', 'align': 'right'},
+    {'name': 'kontrola', 'label': 'Kontrola pliku wynikowego', 'field': 'kontrola', 'align': 'left'},
+]
+
+
+def _wiersz(w: WynikWsadowy) -> dict:
+    if w.wynik is None:
+        kontrola = f'błąd: {w.blad}'
+    elif w.wynik.bezpieczny:
+        kontrola = 'OK – ukrytych danych nie da się odczytać'
+    else:
+        kontrola = f'SPRAWDŹ – {len(w.wynik.nieznalezione) + len(w.wynik.pozostale)} danych nie ukryto'
+    return {'nazwa': w.nazwa, 'wykryte': w.wykryte, 'zakryte': w.wynik.zakryte if w.wynik else '—',
+            'kontrola': kontrola}
+
+
+def _unikalna(sciezka: Path) -> Path:
+    numer = 2
+    wynik = sciezka
+    while wynik.exists():
+        wynik = sciezka.with_name(f'{sciezka.stem}_{numer}{sciezka.suffix}')
+        numer += 1
+    return wynik
+
+
+def _tryb_wsadowy() -> None:
+    """Wiele plików naraz – np. całe archiwum odpowiedzi przed publikacją."""
+    stan: dict = {'wyniki': None, 'katalog': None}
+
+    async def wgraj(pliki: WgranePliki) -> None:
+        katalog = KATALOG / f'wsadowo-{datetime.now():%Y%m%d-%H%M%S}'
+        katalog.mkdir(parents=True, exist_ok=True)
+        sciezki, odrzucone = [], []
+        for nazwa, dane in pliki:
+            try:
+                sprawdz_plik(nazwa, dane)
+            except BladPliku as blad:
+                odrzucone.append(WynikWsadowy(nazwa, blad=str(blad)))
+                continue
+            sciezka = _unikalna(katalog / bezpieczna_nazwa(nazwa))
+            sciezka.write_bytes(dane)
+            sciezki.append(sciezka)
+        with kontener:
+            postep = ui.notification(f'Anonimizuję {odmiana(len(sciezki), "plik", "pliki", "plików")}…',
+                                     spinner=True, timeout=None)
+        try:
+            wyniki = await run.io_bound(zanonimizuj_wsadowo, sciezki, katalog / 'wynik')
+        finally:
+            postep.dismiss()
+        stan.update(wyniki=odrzucone + wyniki, katalog=katalog / 'wynik')
+        gotowe = sum(1 for w in wyniki if w.wynik and w.wynik.bezpieczny)
+        dziennik.zapisz('Anonimizacja wsadowa (wzorce, bez przeglądu)', kto=dziennik.ASYSTENT,
+                        szczegoly=f'pliki: {len(pliki)}; bez uwag: {gotowe}; odrzucone: {len(odrzucone)}')
+        wyniki_widok.refresh()
+
+    async def zapisz_zip() -> None:
+        katalog: Path = stan['katalog']
+        archiwum = await run.io_bound(shutil.make_archive, str(katalog.parent / 'zanonimizowane'), 'zip', katalog)
+        await zapisz_jako(Path(archiwum), 'Archiwum ZIP')
+
+    with ui.expansion('Wiele plików naraz (tryb wsadowy)', icon='folder_copy') \
+            .classes('w-full q-mt-md').props('bordered'):
+        ui.label('Np. całe archiwum odpowiedzi przed publikacją. W każdym pliku od razu ukrywane są wszystkie dane '
+                 'wykryte wzorcami – bez Bielika i bez przeglądu, więc pliki wynikowe trzeba przejrzeć (ukryte '
+                 'zostaną też np. nazwiska osób pełniących funkcje publiczne).').classes('text-caption text-grey-8')
+        strefa_wgrywania(wgraj, tytul='Przeciągnij tutaj pliki do anonimizacji (wiele naraz)', wiele=True)
+        kontener = ui.column().classes('w-full')
+
+        @ui.refreshable
+        def wyniki_widok() -> None:
+            wyniki: list[WynikWsadowy] | None = stan['wyniki']
+            if not wyniki:
+                return
+            gotowe = sum(1 for w in wyniki if w.wynik and w.wynik.bezpieczny)
+            ui.label(f'Gotowe bez uwag: {gotowe} z {len(wyniki)}.').classes('text-weight-medium')
+            ui.table(columns=KOLUMNY_WSADOWE, rows=[_wiersz(w) for w in wyniki], row_key='nazwa') \
+                .classes('w-full').props('flat bordered dense')
+            with ui.row().classes('gap-1'):
+                ui.button('Zapisz wszystkie (ZIP)', icon='folder_zip', on_click=zapisz_zip)
+                ui.button('Otwórz folder', icon='folder_open',
+                          on_click=lambda: otworz_w_systemie(stan['katalog'])).props('flat')
+
+        with kontener:
+            wyniki_widok()

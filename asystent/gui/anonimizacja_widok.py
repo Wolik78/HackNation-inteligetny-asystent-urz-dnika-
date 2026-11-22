@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 from nicegui import ui
 
+from .. import dziennik
 from ..ai import BladAI
 from ..anonimizacja import podziel_na_fragmenty, wykryj_wzorce
 from ..uslugi import bielik
@@ -18,9 +19,10 @@ RECZNE = 'Dodane ręcznie'
 
 class PanelAnonimizacji:
     def __init__(self, stan: dict, *, klucz_tekstu: str, pusty: str = 'Brak tekstu do sprawdzenia.',
-                 po_zmianie: Callable[[], None] | None = None) -> None:
+                 po_zmianie: Callable[[], None] | None = None, sprawa: str = '') -> None:
         self.stan = stan
         self.klucz = klucz_tekstu
+        self.sprawa = sprawa  # numer sprawy do dziennika AI ('' – plik spoza rejestru)
         self.pusty = pusty
         self.po_zmianie = po_zmianie or (lambda: None)
         self._zbuduj()
@@ -41,6 +43,8 @@ class PanelAnonimizacji:
             return
         reczne = {c: t for c, t in self.stan['wykryte'].items() if t == RECZNE}
         self.stan['wykryte'] = {**wykryj_wzorce(tekst), **reczne}
+        wzorce = len(self.stan['wykryte']) - len(reczne)
+        bielik_odpowiedzial = False
         self.odswiez()
         if uzyj_ai:
             self.przycisk.props('loading')
@@ -48,6 +52,7 @@ class PanelAnonimizacji:
             try:
                 for ciag in await bielik.wykryj_dane_osobowe(tekst):
                     self.stan['wykryte'].setdefault(ciag, 'Dane osobowe (Bielik)')
+                bielik_odpowiedzial = True
             except BladAI as blad:
                 if not self.info.is_deleted:
                     with self.info:
@@ -61,6 +66,10 @@ class PanelAnonimizacji:
                 return
             self.odswiez()
         n = len(self.stan['wykryte'])
+        dziennik.zapisz('Propozycje danych osobowych do ukrycia',
+                        kto=dziennik.AI if bielik_odpowiedzial else dziennik.ASYSTENT, sprawa=self.sprawa,
+                        szczegoly=f'wzorce: {wzorce}, Bielik: '
+                                  f'{n - wzorce - len(reczne) if bielik_odpowiedzial else "niedostępny"}')
         with self.info:
             ui.notify(f'Znaleziono {odmiana(n, "fragment", "fragmenty", "fragmentów")} do sprawdzenia.')
 

@@ -17,6 +17,7 @@ from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from enum import StrEnum
+from typing import Any
 
 from .. import rejestr
 from ..anonimizacja import wykryj_wzorce
@@ -44,6 +45,7 @@ class Intencja(StrEnum):
     KONTROLA = 'kontrola_pisma'
     DANE_OSOBOWE = 'dane_osobowe'
     TERMINY = 'terminy'
+    PODOBNE = 'podobne_sprawy'
     PRZEPISY = 'pytanie_o_przepisy'
     POMOC = 'pomoc_w_aplikacji'
     O_SOBIE = 'o_urzedusiu'
@@ -62,6 +64,7 @@ OPISY_INTENCJI = {
     Intencja.KONTROLA: 'sprawdzenie gotowego projektu pisma – czy liczby się zgadzają i czy odpowiada na wszystko',
     Intencja.DANE_OSOBOWE: 'wyszukanie danych osobowych do anonimizacji',
     Intencja.TERMINY: 'terminy – które wnioski trzeba załatwić dziś, jutro, które są po terminie',
+    Intencja.PODOBNE: 'wyszukanie podobnych spraw w archiwum odpowiedzi i w rejestrze wniosków',
     Intencja.PRZEPISY: 'pytanie o przepisy i procedurę udostępniania informacji publicznej',
     Intencja.POMOC: 'pytanie o tę aplikację – do czego służy ekran lub funkcja (np. Archiwum, Baza wiedzy), '
                     'jak coś w niej zrobić',
@@ -80,6 +83,7 @@ POWITANIE = (
     'Cześć! Jestem Urzęduś, Twój asystent AI. Mogę pomóc w:\n'
     '• streszczeniu wniosku i odpowiedziach na pytania o dokumenty sprawy,\n'
     '• wskazaniu wydziałów, które mają potrzebne informacje,\n'
+    '• wyszukaniu podobnych spraw w archiwum odpowiedzi,\n'
     '• napisaniu prośby do wydziału, zawiadomienia o przedłużeniu terminu albo prośby o doprecyzowanie wniosku,\n'
     '• przygotowaniu projektu odpowiedzi i sprawdzeniu go – czy liczby się zgadzają i czy odpowiada na wszystko,\n'
     '• wyszukaniu danych osobowych do anonimizacji,\n'
@@ -91,12 +95,13 @@ POWITANIE = (
 )
 
 O_SOBIE = (
-    'Jestem Urzęduś – asystent AI wbudowany w aplikację Asystent UDIP Urzędu Miasta Bydgoszczy. '
+    'Jestem Urzęduś – asystent AI wbudowany w aplikację Cyfrowy Ratusz Urzędu Miasta Bydgoszczy. '
     'Mój zakres obowiązków:\n'
     '• praca na otwartej sprawie – streszczam wniosek, odpowiadam na pytania o jej dokumenty, proponuję wydziały, '
     'piszę prośby do wydziałów, zawiadomienia o przedłużeniu terminu, prośby o doprecyzowanie i projekt '
     'odpowiedzi, sprawdzam gotowe pismo, szukam danych osobowych do anonimizacji,\n'
     '• pilnowanie terminów – powiem, co trzeba załatwić dziś i jutro,\n'
+    '• wyszukiwanie podobnych spraw w archiwum – żeby nie pisać odpowiedzi od zera,\n'
     '• wyjaśnianie przepisów ustawy o dostępie do informacji publicznej,\n'
     '• pomoc w obsłudze aplikacji – np. do czego służy Archiwum albo jak wyeksportować pismo.\n\n'
     'Działam na modelu Bielik uruchomionym lokalnie, więc żaden dokument nie opuszcza tego komputera. '
@@ -143,6 +148,11 @@ class DaneSprawy:
     projekt: str = ''
     sugerowane_wydzialy: list[str] = field(default_factory=list)
     ukryte: set[str] = field(default_factory=set)   # dane osobowe zatwierdzone do ukrycia
+    termin_kwerendy: date | None = None             # nowy termin po przedłużeniu (kwerenda), jeśli ustawiony
+
+    @property
+    def termin_obowiazujacy(self) -> date:
+        return self.termin_kwerendy or self.termin
 
 
 @dataclass
@@ -204,7 +214,9 @@ _REGULY_INTENCJI = [  # kolejność ma znaczenie – bardziej szczegółowe najp
                        r'twoj\w* (zakres|obowiazk|zadan|mozliwos|funkcj|rol)|'
                        r'zakres\w* (twoich )?obowiazk\w*)'),
     (Intencja.POMOC, _pytanie_o_aplikacje),
-    (Intencja.KONTROLA, r'\b(sprawdz\w*|zweryfikuj\w*|skontroluj\w*|przejrzyj|przeanalizuj)\b.{0,30}'
+    (Intencja.PODOBNE, r'\b(znajdz|wyszukaj|poszukaj|szukaj|pokaz|jakie|czy (byl\w*|mamy|sa))\b.{0,40}'
+                       r'\b(podobn\w*|archiw\w*|wczesniejsz\w*|poprzedni\w*)|\bpodobn\w* (spraw|wniosk|odpowiedz)'),
+    (Intencja.KONTROLA,r'\b(sprawdz\w*|zweryfikuj\w*|skontroluj\w*|przejrzyj|przeanalizuj)\b.{0,30}'
                         r'\b(pism\w*|projekt\w*|odpowiedz\w*)|'
                         r'\bczy (to )?(pismo|projekt)\b.{0,40}\b(poprawn\w*|kompletn\w*|odpowiada\w*|dobr\w*|ok)\b'),
     (Intencja.ZAWIADOMIENIE, r'\bzawiadomieni\w*\b|' + _CZASOWNIK_PISANIA + r'\b(przedluz\w*|wydluz\w*)'),
@@ -236,6 +248,8 @@ def jest_poza_tematem(wiadomosc: str) -> bool:
 
 
 _ZDANIE_PYTAJACE = re.compile(r'^\W*(czy|jak|jaki\w*|kiedy|ile|dlaczego|po co|w jakim|na jakiej|co)\b')
+# „znajdź podobne sprawy o wycince drzew” → „wycince drzew” (temat wyszukiwania podany w poleceniu)
+_TEMAT_WYSZUKIWANIA = re.compile(r'\b(?:o|dotycząc\w*|na temat|w sprawie)\s+(.{4,})$', re.IGNORECASE)
 _PISANIE_PISM = {Intencja.ZAWIADOMIENIE, Intencja.WEZWANIE, Intencja.PROSBA_DO_WYDZIALU, Intencja.PROJEKT}
 _PODZIEKOWANIE = re.compile(r'\b(dzieki|dziekuje\w*|dziekowac|thx|thanks)\b')
 _SLOWA_GRZECZNOSCIOWE = {
@@ -318,9 +332,11 @@ async def pilnuj_zakresu(strumien: AsyncIterator[str]) -> AsyncIterator[str]:
 
 class Urzedus:
     def __init__(self, bielik: BielikService,
-                 dobor_wydzialow: Callable[[str], Awaitable[WynikDoboru]] = dobierz_async) -> None:
+                 dobor_wydzialow: Callable[[str], Awaitable[WynikDoboru]] = dobierz_async,
+                 szukaj_podobnych: Callable[..., Awaitable[Any]] | None = None) -> None:
         self.bielik = bielik
         self.dobor_wydzialow = dobor_wydzialow  # moduł doboru wydziałów z BIP (asystent/ai/wydzialy.py)
+        self.szukaj_podobnych = szukaj_podobnych  # Archiwum.szukaj (asystent/archiwum.py) – podaje uslugi.py
 
     async def rozpoznaj(self, wiadomosc: str, ma_sprawe: bool) -> Intencja:
         if (intencja := rozpoznaj_lokalnie(wiadomosc)) is not None:
@@ -356,6 +372,8 @@ class Urzedus:
             return self._pomoc(wiadomosc)
         if intencja is Intencja.TERMINY:
             return self._terminy()
+        if intencja is Intencja.PODOBNE:
+            return await self._podobne(wiadomosc, sprawa)
         if intencja is Intencja.PRZEPISY or (sprawa is None and intencja is Intencja.PYTANIE_O_SPRAWE):
             # pytanie bez otwartej sprawy traktujemy jak pytanie o przepisy
             return Wynik(Intencja.PRZEPISY, strumien=self._przepisy(wiadomosc))
@@ -426,7 +444,7 @@ class Urzedus:
             sprawa.projekt, [('wniosek', sprawa.tekst_wniosku)],
             do_pokrycia=[('odpowiedzi wydziałów', sprawa.odpowiedzi_wydzialow)], ukryte=sprawa.ukryte,
             dane_sprawy=[sprawa.nr, f'{sprawa.data_wplywu:%d.%m.%Y}', f'{sprawa.termin:%d.%m.%Y}',
-                         f'{date.today():%d.%m.%Y}'])
+                         f'{sprawa.termin_obowiazujacy:%d.%m.%Y}', f'{date.today():%d.%m.%Y}'])
         linie = [f'Wartości potwierdzone w źródłach: {len(wynik.potwierdzone)}.']
         if wynik.problemy:
             linie.append('Do poprawy:' if wynik.bledy else 'Uwagi:')
@@ -452,19 +470,47 @@ class Urzedus:
             wniosek=sprawa.tekst_wniosku or f'Wniosek dotyczy: {sprawa.temat}.',
             informacje_wydzialow=sprawa.odpowiedzi_wydzialow or '(wydziały nie przekazały jeszcze informacji)'))
 
+    def zawiadomienie_o_przedluzeniu(self, sprawa: DaneSprawy) -> AsyncIterator[str]:
+        """Zawiadomienie wnioskodawcy o przedłużeniu terminu (art. 13 ust. 2) – przycisk przy kwerendzie."""
+        return self._pismo(prompty.ZAWIADOMIENIE_O_PRZEDLUZENIU, sprawa)
+
     def _pismo(self, rodzaj_i_instrukcja: tuple[str, str], sprawa: DaneSprawy) -> AsyncIterator[str]:
         rodzaj, instrukcja = rodzaj_i_instrukcja
-        termin_wydzialu = max(sprawa.termin - timedelta(days=3), date.today())
+        termin_wydzialu = max(sprawa.termin_obowiazujacy - timedelta(days=3), date.today())
+        przedluzenie = (f'Nowy termin udostępnienia informacji (przedłużony): {sprawa.termin_kwerendy:%d.%m.%Y}'
+                        if sprawa.termin_kwerendy else
+                        f'Najpóźniejszy termin po przedłużeniu (2 miesiące): '
+                        f'{sprawa.data_wplywu + timedelta(days=60):%d.%m.%Y}')
         dane = (f'Numer sprawy: {sprawa.nr}\nTemat: {sprawa.temat}\n'
                 f'Data wpływu wniosku: {sprawa.data_wplywu:%d.%m.%Y}\n'
                 f'Termin odpowiedzi (14 dni): {sprawa.termin:%d.%m.%Y}\n'
                 f'Termin dla wydziału: {termin_wydzialu:%d.%m.%Y}\n'
-                f'Najpóźniejszy termin po przedłużeniu (2 miesiące): '
-                f'{sprawa.data_wplywu + timedelta(days=60):%d.%m.%Y}\n'
+                f'{przedluzenie}\n'
                 f'Sugerowane wydziały: {", ".join(sprawa.sugerowane_wydzialy) or "brak"}')
         tekst_wniosku = sprawa.tekst_wniosku or f'Wniosek dotyczy: {sprawa.temat}.'
         return self._odpowiedz(prompty.pismo(rodzaj, instrukcja, tekst_wniosku[:3000], dane),
                                max_tokens=MAX_TOKENOW_PISMA)
+
+    async def _podobne(self, wiadomosc: str, sprawa: DaneSprawy | None) -> Wynik:
+        """Podobne sprawy: temat z polecenia („…podobne sprawy o wycince drzew”), a bez niego – otwarta sprawa."""
+        if self.szukaj_podobnych is None:
+            return Wynik(Intencja.PODOBNE, tekst='Wyszukiwanie w archiwum jest niedostępne.')
+        if temat := _TEMAT_WYSZUKIWANIA.search(wiadomosc):
+            zapytanie = temat[1]
+        elif sprawa is not None:
+            zapytanie = sprawa.tekst_wniosku or sprawa.temat
+        else:
+            return Wynik(Intencja.PODOBNE, tekst='Napisz, czego mają dotyczyć sprawy – np. „znajdź podobne sprawy '
+                                                 'o wycince drzew” – albo otwórz sprawę, a poszukam podobnych do niej.')
+        wynik = await self.szukaj_podobnych(zapytanie, limit=6)
+        trafienia = [t for t in wynik.trafienia if sprawa is None or t.dokument.nr != sprawa.nr][:5]
+        if not trafienia:
+            return Wynik(Intencja.PODOBNE, tekst='Nie znalazłem podobnych spraw w archiwum ani w rejestrze.')
+        linie = [f'• {t.procent}% – {t.dokument.nr + " – " if t.dokument.nr else ""}{t.dokument.tytul} '
+                 f'({t.dokument.opis_rodzaju.lower()}{f", {t.dokument.data:%d.%m.%Y}" if t.dokument.data else ""})'
+                 for t in trafienia]
+        return Wynik(Intencja.PODOBNE, tekst='Najbardziej podobne sprawy:\n' + '\n'.join(linie) +
+                     '\n\nPodgląd i wybór wzoru pisma: krok „Podobne sprawy” w sprawie albo ekran Archiwum.')
 
     async def _wydzialy(self, sprawa: DaneSprawy) -> Wynik:
         wynik = await self.dobor_wydzialow(sprawa.tekst_wniosku)
@@ -505,6 +551,6 @@ class Urzedus:
         limit = await self.bielik.dostepny_limit_znakow(MAX_TOKENOW_ODPOWIEDZI)
         czesci = [('WNIOSEK', sprawa.tekst_wniosku, 0.35), ('ODPOWIEDZI WYDZIAŁÓW', sprawa.odpowiedzi_wydzialow, 0.45),
                   ('PROJEKT ODPOWIEDZI', sprawa.projekt, 0.20)]
-        naglowek = f'Sprawa {sprawa.nr}: {sprawa.temat}. Termin odpowiedzi: {sprawa.termin:%d.%m.%Y}.'
+        naglowek = f'Sprawa {sprawa.nr}: {sprawa.temat}. Termin odpowiedzi: {sprawa.termin_obowiazujacy:%d.%m.%Y}.'
         return '\n\n'.join([naglowek] + [f'[{nazwa}]\n{tekst[:int(limit * udzial)]}'
                                          for nazwa, tekst, udzial in czesci if tekst.strip()])

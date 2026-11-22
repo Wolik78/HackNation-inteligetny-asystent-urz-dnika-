@@ -1,0 +1,2 @@
+# Skrypty Windows muszą mieć końce linii CRLF (inaczej cmd potrafi źle wykonać goto i etykiety).
+*.bat text eol=crlf

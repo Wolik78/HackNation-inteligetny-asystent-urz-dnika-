@@ -1,4 +1,4 @@
-# TO-DO do MVP – Asystent UDIP (HackNation 2026, UM Bydgoszcz)
+# TO-DO do MVP – Cyfrowy Ratusz (HackNation 2026, UM Bydgoszcz)
 
 Priorytety: **P0** – bez tego nie przejdziemy testów jury · **P1** – mocno podnosi ocenę · **P2** – jeśli zostanie czas.
 W nawiasach odwołania do treści zadania: „Z” = założenia (pkt 2), „I” = instrukcja działania, „J” = testy jury (pkt 6).
@@ -18,7 +18,7 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 - [x] Kontrola jakości pisma: liczby ze źródłami, pominięte dane, kompletność (Z7 – „wykluczyć halucynacje”)
 - [x] Czat Urzęduś z regulacjami zakresu
 - [x] Baza wiedzy: ustawy, zarządzenia, archiwalne odpowiedzi (I1, J6)
-- [x] 259 testów automatycznych + linter (ruff), fikcyjne dane testowe w `dane_testowe/` (opis: `dane_testowe/README.md`)
+- [x] 276 testów automatycznych + linter (ruff), fikcyjne dane testowe w `dane_testowe/` (opis: `dane_testowe/README.md`)
 
 ---
 
@@ -62,18 +62,18 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 ## 3. AI i automatyzacja
 
 - [ ] P1 **Szybkość**: model `Bielik-4.5B-v3.0-Instruct` w wersji **Q4_K_M** (Q8_0 nie mieści się w 4 GB VRAM GTX 1650), pełny GPU offload; zmierzyć czasy przed i po
-- [ ] P1 Autopilot w tle (Z4 – automatyzacja): po wgraniu wniosku analiza + podobne sprawy + prośba do wydziałów; po wgraniu odpowiedzi projekt + dane osobowe + kontrola; kolejka zadań i znacznik „AI pracuje…” na liście
+- [x] P1 Autopilot: po wgraniu wniosku – opis, wydziały, rodzaj, dane wnioskodawcy, podobne sprawy i wzór pisma; po wgraniu odpowiedzi wydziału – projekt pisma, kontrola jakości i dane osobowe do sprawdzenia
 - [x] P1 Klasyfikacja wniosku i ścieżka postępowania: zwykła / przetworzona / nie jest informacją publiczną / dostępna w BIP / do doprecyzowania → odpowiedź, decyzja odmowna albo prośba o doprecyzowanie
 - [ ] P2 Rozgrzanie modelu przy starcie aplikacji (pierwsze zapytanie jest najwolniejsze)
-- [ ] P2 Odczyt danych z wniosku: wnioskodawca, e-mail/adres do odpowiedzi
+- [x] P2 Odczyt danych z wniosku: wnioskodawca, e-mail/adres do odpowiedzi
 - [x] P2 OCR skanów i zdjęć offline (OCR Windows, `asystent/pliki/ocr.py`) – PDF bez tekstu, JPG/PNG, Word ze zdjęciem
   - [ ] P2 pismo odręczne – OCR Windows czyta je słabo; sprawdzić na prawdziwych skanach od mentorów
-- [ ] P2 Zawiadomienie o kwerendzie z jednego kliknięcia przy zaznaczeniu kwerendy
+- [x] P2 Zawiadomienie o kwerendzie z jednego kliknięcia po ustawieniu kwerendy (i w menu „⋮”)
 
 ## 4. Bezpieczeństwo i RODO (20% oceny)
 
 - [ ] P1 Test „bez internetu”: odłączyć sieć i przejść całą ścieżkę (pokazać na filmie)
-- [ ] P1 Dziennik działań AI: co zaproponował model, co zatwierdził urzędnik, kiedy (bez danych osobowych w logach)
+- [x] P1 Dziennik działań AI: co zaproponował model, co zatwierdził urzędnik, kiedy (bez danych osobowych w logach)
 - [ ] P1 Opis zabezpieczeń do prezentacji: lokalny model, dane w `dane/`, walidacja plików, regulacje czatu, maskowanie, brak wysyłki
 - [ ] P2 Usuwanie danych zakończonej sprawy po okresie przechowywania (retencja)
 - [ ] P2 Szyfrowanie folderu danych (np. BitLocker / zaszyfrowany katalog – `UDIP_KATALOG_DANYCH`)
@@ -84,7 +84,7 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 - [ ] P1 Wgrać ustawę UDIP i KPA (linki z treści zadania, ISAP) do Bazy wiedzy
 - [ ] P1 Aktualizacja ustaw: nowa wersja zastępuje starą (wersjonowanie, data obowiązywania) (J6)
 - [ ] P1 Archiwum testowe: kilkadziesiąt archiwalnych odpowiedzi do pokazu wyszukiwania (od mentorów albo przygotowane)
-- [ ] P2 Import całego folderu naraz (np. archiwum z roku)
+- [x] P2 Import całego folderu naraz (Baza wiedzy) i anonimizacja wielu plików naraz (ZIP)
 - [ ] P2 Test wydajności: 300+ dokumentów w bazie – czas indeksowania i wyszukiwania
 
 ## 6. Wygląd i łatwość obsługi (20% oceny)
@@ -97,7 +97,7 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 
 ## 7. Stabilność i wdrożenie („łatwo zainstalować i uruchomić”)
 
-- [ ] P1 Paczka `.exe` (`nicegui-pack` / PyInstaller) + instrukcja instalacji LM Studio i modelu Bielik
+- [x] P1 Paczka `.exe` (`zbuduj_exe.bat`, PyInstaller, sprawdzona: demo, wydziały, OCR, anonimizacja) + instrukcja LM Studio w README
 - [ ] P1 Test na czystym komputerze (bez Pythona) – od rozpakowania do pierwszego wniosku
 - [ ] P1 Obsługa błędów: brak LM Studio, uszkodzony plik, brak miejsca na dysku – czytelne komunikaty, bez wysypania aplikacji
 - [ ] P2 GitHub Actions: testy przy każdym pushu
@@ -124,3 +124,9 @@ Kryteria oceny: zgodność z założeniami 30% · bezpieczeństwo i anonimizacja
 - [ ] LM Studio: model załadowany, port 1235, sprawdzone „Sprawdź połączenie”
 - [ ] Laptop: zasilanie, wyłączone powiadomienia i aktualizacje, rozdzielczość do nagrania
 - [ ] Przejście całego scenariusza jury (J1–J6) na czysto, z zegarkiem
+
+## 10. Dodatki zrobione przed oddaniem
+
+- [x] Pulpit „Na dziś”: pilne sprawy, czekające na wydziały, terminowość, średni czas odpowiedzi, wykres wpływu
+- [x] Eksport rejestru do Excela (.xlsx) i terminów do Outlooka (.ics, bez danych osobowych)
+- [x] Czat Urzęduś: „znajdź podobne sprawy” (dla otwartej sprawy albo tematu z polecenia)

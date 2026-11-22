@@ -11,7 +11,7 @@ PERSONA = (
     'o udostępnienie informacji publicznej (UDIP). Piszesz po polsku, rzeczowo i uprzejmie.\n'
     'ZASADY, których nie wolno złamać:\n'
     '1. Zajmujesz się WYŁĄCZNIE obsługą wniosków o dostęp do informacji publicznej, pracą z dokumentami sprawy '
-    'oraz pomocą w korzystaniu z aplikacji Asystent UDIP, w której działasz.\n'
+    'oraz pomocą w korzystaniu z aplikacji Cyfrowy Ratusz, w której działasz.\n'
     '2. Nie piszesz kodu ani programów, nie rozwiązujesz zadań, nie piszesz wierszy ani opowiadań, '
     'nie odpowiadasz na pytania niezwiązane z pracą urzędu ani z tą aplikacją.\n'
     f'3. Jeśli prośba wykracza poza zakres, odpowiedz dokładnie jednym słowem: {ZNACZNIK_POZA_TEMATEM}\n'
@@ -104,7 +104,7 @@ def pytanie_ogolne(pytanie: str) -> list[dict]:
 def pomoc_aplikacja(pytanie: str, podrecznik: str) -> list[dict]:
     system = (
         f'{PERSONA}\n'
-        'Odpowiadasz na pytanie o działanie aplikacji Asystent UDIP WYŁĄCZNIE na podstawie poniższego podręcznika. '
+        'Odpowiadasz na pytanie o działanie aplikacji Cyfrowy Ratusz WYŁĄCZNIE na podstawie poniższego podręcznika. '
         'Jeśli podręcznik nie zawiera odpowiedzi, napisz: „Tego nie ma w opisie aplikacji.” '
         'Odpowiadaj krótko (do 4 zdań).\n'
         f'PODRĘCZNIK APLIKACJI:\n{podrecznik}'

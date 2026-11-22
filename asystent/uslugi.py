@@ -7,5 +7,5 @@ from .pliki import MagazynPlikow
 
 magazyn = MagazynPlikow(KATALOG_DANYCH)
 bielik = BielikService()
-urzedus = Urzedus(bielik)
 archiwum = Archiwum(magazyn, bielik)
+urzedus = Urzedus(bielik, szukaj_podobnych=archiwum.szukaj)

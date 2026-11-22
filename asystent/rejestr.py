@@ -256,6 +256,12 @@ def przywroc_dane_testowe() -> None:
     _zapisz()
 
 
+def odnotuj(wniosek: Wniosek, zdarzenie: str) -> None:
+    """Dopisuje zdarzenie do przebiegu sprawy (np. zapisane zawiadomienie) i zapisuje rejestr."""
+    _odnotuj(wniosek, zdarzenie)
+    _zapisz()
+
+
 def _odnotuj(wniosek: Wniosek, zdarzenie: str, kiedy: datetime | None = None) -> None:
     wniosek.historia.append({'kiedy': (kiedy or datetime.now()).isoformat(timespec='minutes'),
                              'zdarzenie': zdarzenie})

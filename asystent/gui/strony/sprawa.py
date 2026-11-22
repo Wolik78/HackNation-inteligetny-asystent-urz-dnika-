@@ -8,17 +8,19 @@ from pathlib import Path
 
 from nicegui import app, run, ui
 
-from ... import klasyfikacja, rejestr, stan_sprawy
+from ... import dziennik, klasyfikacja, rejestr, stan_sprawy
 from ...archiwum import opis_dokumentu
-from ...ai import BladAI, usun_markdown
+from ...ai import BladAI, OdpowiedzPozaTematem, usun_markdown
 from ...ai.wydzialy import dobierz, nazwy_wydzialow
-from ...anonimizacja import podziel_na_fragmenty, zamaskuj
+from ...anonimizacja import MASKA, podziel_na_fragmenty, wykryj_wzorce, zamaskuj
+from ...konfiguracja import AUTOPILOT
 from ...kontrola import WynikKontroli, sprawdz_pismo
 from ...pliki import FORMATY, Kategoria, ZapisanyPlik, eksportuj, nazwa_pliku_odpowiedzi
 from ...rejestr import Wniosek
-from ...uslugi import archiwum, bielik, magazyn
+from ...uslugi import archiwum, bielik, magazyn, urzedus
 from ..anonimizacja_widok import PanelAnonimizacji
 from ..archiwum_widok import karta_trafienia, opis_trybu
+from ..czat import dane_sprawy
 from ..komponenty import (WgranePliki, blad_ai, karta_pliku, odmiana, otworz_w_systemie,
                           potwierdz, strefa_wgrywania, wskaznik_postepu, zapisz_wgrane)
 from ..kontekst import biezacy
@@ -213,6 +215,8 @@ def _krok_wydzialy(w: Wniosek) -> Odswiezacz:
         w.sugerowane_wydzialy = dobor.etykiety
         w.uzasadnienie_wydzialu = dobor.uzasadnienie
         rejestr.zapisz_zmiany()
+        dziennik.zapisz('Propozycja wydziałów', sprawa=w.nr, kto=dziennik.AI if dobor.zrodlo == 'bielik'
+                        else dziennik.ASYSTENT, szczegoly=', '.join(p.skrot for p in dobor.propozycje))
         if przycisk.is_deleted:  # urzędnik wyszedł ze sprawy – wynik i tak zapisany
             return
         if dobor.komunikat:  # np. LM Studio wyłączone – wynik z samych słów kluczowych
@@ -222,6 +226,8 @@ def _krok_wydzialy(w: Wniosek) -> Odswiezacz:
     def zmien_wybor(zdarzenie) -> None:
         w.sugerowane_wydzialy = list(zdarzenie.value or [])
         rejestr.zapisz_zmiany()
+        dziennik.zapisz('Zmiana listy wydziałów', kto=dziennik.URZEDNIK, sprawa=w.nr,
+                        szczegoly=f'wybrane: {len(w.sugerowane_wydzialy)}')
         uzasadnienia.refresh()  # samo pole wyboru zostaje – lista się nie zamyka
 
     async def kopiuj() -> None:
@@ -267,7 +273,7 @@ def _krok_wydzialy(w: Wniosek) -> Odswiezacz:
 
 # --- krok 4: odpowiedzi wydziałów ------------------------------------------------------
 
-def _krok_odpowiedzi(w: Wniosek, po_zmianie_statusu: Callable[[], None]) -> Odswiezacz:
+def _krok_odpowiedzi(w: Wniosek, stan: dict, akcje: dict, po_zmianie_statusu: Callable[[], None]) -> Odswiezacz:
     ui.label('Odpowiedzi z wydziałów').classes('text-weight-medium')
     with ui.row().classes('w-full items-start no-wrap gap-6'):
         with ui.column().classes('w-[26rem] shrink-0'):
@@ -283,6 +289,11 @@ def _krok_odpowiedzi(w: Wniosek, po_zmianie_statusu: Callable[[], None]) -> Odsw
         if await zapisz_wgrane(pliki, zapis):
             odpowiedzi.refresh()
             _awansuj(w, 'wydzialy', 'wgrano odpowiedź wydziału', po_zmianie_statusu)
+            # Autopilot: projekt jeszcze nie powstał – Bielik pisze go od razu, potem kontrola i dane osobowe
+            generuj = akcje.get('generuj_projekt')
+            if AUTOPILOT and generuj and stan['projekt'] in ('', stan['szablon']) and not stan['generowanie']:
+                ui.notify('Autopilot: Bielik pisze projekt odpowiedzi na podstawie odpowiedzi wydziału…', type='info')
+                await generuj(automatycznie=True)
 
     async def usun(plik: ZapisanyPlik) -> None:
         await run.io_bound(magazyn.usun, plik)
@@ -314,10 +325,10 @@ def _nazwa_wzoru(plik: ZapisanyPlik) -> str:
     return f'{nr} – {temat}' if nr else temat
 
 
-def _krok_projekt(w: Wniosek, stan: dict) -> Odswiezacz:
+def _krok_projekt(w: Wniosek, stan: dict, akcje: dict) -> Odswiezacz:
     archiwalne = magazyn.lista(Kategoria.ARCHIWUM)
 
-    async def generuj() -> None:
+    async def generuj(automatycznie: bool = False) -> None:
         odpowiedzi = magazyn.lista(Kategoria.ODPOWIEDZ_WYDZIALU, sprawa=w.nr)
         # pozostałe rodzaje sprawy: wezwanie / pismo informujące – bez danych od wydziałów
         zwykla = w.rodzaj == klasyfikacja.DOMYSLNY
@@ -356,7 +367,18 @@ def _krok_projekt(w: Wniosek, stan: dict) -> Odswiezacz:
             przycisk_stop.set_visibility(False)
             postep.set_visibility(False)
         if stan['projekt'] != stan['szablon']:
+            dziennik.zapisz('Projekt pisma' + (' (autopilot)' if automatycznie else ''), sprawa=w.nr, szczegoly=(
+                f'{klasyfikacja.rodzaj(w.rodzaj).pismo}; {len(stan["projekt"])} znaków'
+                + ('; wzór z archiwum' if wzor else '')))
             kontrola.sprawdz_bez_ai()  # od razu pokazujemy liczby bez pokrycia i braki
+            if automatycznie:  # autopilot zaznacza też dane osobowe do sprawdzenia (bez ukrywania – decyduje urzędnik)
+                stan['wykryte'] = {**wykryj_wzorce(stan['projekt']), **stan['wykryte']}
+                if not postep.is_deleted:
+                    ui.notify('Autopilot: projekt pisma gotowy, kontrola jakości zrobiona, dane osobowe zaznaczone '
+                              'do sprawdzenia – kroki „Projekt odpowiedzi” i „Anonimizacja”.', type='positive',
+                              close_button='OK', timeout=15_000)
+
+    akcje['generuj_projekt'] = generuj
 
     with ui.row().classes('w-full items-center justify-between'):
         ui.label('Projekt odpowiedzi').classes('text-weight-medium')
@@ -364,7 +386,7 @@ def _krok_projekt(w: Wniosek, stan: dict) -> Odswiezacz:
             # wzór wybiera się sam z najlepszej podobnej sprawy (krok 2) – tu można go zmienić albo usunąć
             ui.select({p.plik: _nazwa_wzoru(p) for p in archiwalne}, label='Wzór z archiwum (opcjonalnie)',
                       clearable=True).bind_value(stan, 'wzor').classes('w-80')
-            przycisk_generuj = ui.button('Generuj projekt (Bielik)', icon='auto_awesome', on_click=generuj)
+            przycisk_generuj = ui.button('Generuj projekt (Bielik)', icon='auto_awesome', on_click=lambda: generuj())
             przycisk_stop = ui.button('Zatrzymaj', icon='stop',
                                       on_click=lambda: stan.update(generowanie=False)).props('outline color=negative')
             przycisk_stop.set_visibility(False)
@@ -416,6 +438,9 @@ class PanelKontroli:
             ukryte=self.stan['ukryte'], dane_sprawy=_dane_sprawy(self.w))
         self.stan['kontrola_tekst'] = self.stan['projekt']
         self.stan['kompletnosc'] = None
+        wynik: WynikKontroli = self.stan['kontrola']
+        dziennik.zapisz('Kontrola jakości pisma', kto=dziennik.ASYSTENT, sprawa=self.w.nr,
+                        szczegoly=f'błędy: {len(wynik.bledy)}, ostrzeżenia: {len(wynik.ostrzezenia)}')
         self.odswiez()
 
     async def sprawdz(self) -> None:
@@ -522,8 +547,8 @@ def _plakietka(tekst: str, kolor: str, ikona: str) -> None:
 
 # --- krok 6: anonimizacja --------------------------------------------------------------
 
-def _krok_anonimizacja(stan: dict) -> Odswiezacz:
-    panel = PanelAnonimizacji(stan, klucz_tekstu='projekt', pusty='Projekt odpowiedzi jest pusty.')
+def _krok_anonimizacja(w: Wniosek, stan: dict) -> Odswiezacz:
+    panel = PanelAnonimizacji(stan, klucz_tekstu='projekt', pusty='Projekt odpowiedzi jest pusty.', sprawa=w.nr)
     return panel.widok.refresh
 
 
@@ -555,6 +580,8 @@ async def _zapisz_pismo(w: Wniosek, tekst: str, format: str) -> Path | None:
     """Zapisuje pismo w dokumentach sprawy, a w trybie okna pyta też, gdzie zapisać kopię."""
     nazwa = nazwa_pliku_odpowiedzi(w.nr, format)
     kopia = await run.io_bound(eksportuj, tekst, magazyn.katalog_eksportu(w.nr) / nazwa)
+    dziennik.zapisz('Eksport pisma – zatwierdzono treść', kto=dziennik.URZEDNIK, sprawa=w.nr,
+                    szczegoly=f'.{format}; zamaskowane fragmenty: {tekst.count(MASKA)}')
 
     okno = app.native.main_window
     if okno is None:  # tryb przeglądarki
@@ -695,7 +722,54 @@ async def _zapytaj_o_date(pytanie: str, domyslna: date) -> date | None:
     return data
 
 
-def _menu_sprawy(w: Wniosek, stan: dict, katalog: Path, po_zmianie: Callable[[], None]) -> None:
+async def _okno_zawiadomienia(w: Wniosek, stan: dict, po_zmianie: Callable[[], None]) -> None:
+    """Zawiadomienie o przedłużeniu terminu (art. 13 ust. 2) – Bielik pisze na żywo, urzędnik poprawia i zapisuje."""
+    pismo = {'tekst': ''}
+
+    async def kopiuj() -> None:
+        await ui.clipboard.write(pismo['tekst'])
+        ui.notify('Skopiowano zawiadomienie.', type='positive')
+
+    async def zapisz() -> None:
+        if not pismo['tekst'].strip():
+            ui.notify('Zawiadomienie jest puste.', type='warning')
+            return
+        nazwa = f'Zawiadomienie_o_przedluzeniu_{w.nr}.docx'
+        await run.io_bound(eksportuj, usun_markdown(pismo['tekst']), magazyn.katalog_eksportu(w.nr) / nazwa)
+        rejestr.odnotuj(w, f'Przygotowano zawiadomienie o przedłużeniu terminu do {w.termin:%d.%m.%Y}')
+        dziennik.zapisz('Zawiadomienie o przedłużeniu – zatwierdzono treść', kto=dziennik.URZEDNIK, sprawa=w.nr,
+                        szczegoly=f'nowy termin {w.termin:%d.%m.%Y}')
+        po_zmianie()
+        ui.notify(f'Zapisano w dokumentach sprawy: {nazwa}', type='positive')
+        dialog.close()
+
+    with ui.dialog() as dialog, ui.card().classes('w-[46rem] max-w-full'):
+        ui.label(f'Zawiadomienie o przedłużeniu terminu – {w.nr}').classes('text-h6')
+        ui.label(f'Nowy termin: {w.termin:%d.%m.%Y} (art. 13 ust. 2 UDIP). Sprawdź treść przed wysłaniem – '
+                 'aplikacja niczego nie wysyła.').classes('text-caption text-grey-7')
+        postep = wskaznik_postepu('Bielik pisze zawiadomienie…')
+        postep.set_visibility(True)
+        ui.textarea().bind_value(pismo, 'tekst').classes('w-full').props('outlined autogrow')
+        with ui.row().classes('w-full justify-end'):
+            ui.button('Zamknij', on_click=dialog.close).props('flat')
+            ui.button('Kopiuj', icon='content_copy', on_click=kopiuj).props('outline')
+            ui.button('Zapisz .docx w sprawie', icon='save', on_click=zapisz)
+    dialog.open()
+    try:
+        async with aclosing(urzedus.zawiadomienie_o_przedluzeniu(dane_sprawy(w, stan))) as strumien:
+            async for kawalek in strumien:
+                if dialog.is_deleted or not dialog.value:  # zamknięte w trakcie pisania
+                    break
+                pismo['tekst'] += kawalek
+    except (BladAI, OdpowiedzPozaTematem) as blad:
+        if not dialog.is_deleted:
+            blad_ai(f'Nie udało się przygotować zawiadomienia: {blad}')
+    finally:
+        if not postep.is_deleted:
+            postep.set_visibility(False)
+
+
+def _menu_sprawy(w: Wniosek, stan: dict, katalog: Path, po_zmianie: Callable[[], None], kotwica: ui.element) -> None:
     async def edytuj() -> None:
         with ui.dialog() as dialog, ui.card().classes('w-[34rem]'):
             ui.label(f'Dane wniosku {w.nr}').classes('text-h6')
@@ -711,6 +785,7 @@ def _menu_sprawy(w: Wniosek, stan: dict, katalog: Path, po_zmianie: Callable[[],
                 ui.button('Anuluj', on_click=lambda: dialog.submit(False)).props('flat')
                 ui.button('Zapisz', icon='save', on_click=lambda: dialog.submit(True))
         zapisz = await dialog
+        dialog.delete()  # przed odświeżeniem nagłówka – razem z nim znika menu, w którym powstało okno
         if zapisz:
             try:
                 rejestr.aktualizuj(w, temat=temat.value, wnioskodawca=wnioskodawca.value, kontakt=kontakt.value,
@@ -720,7 +795,6 @@ def _menu_sprawy(w: Wniosek, stan: dict, katalog: Path, po_zmianie: Callable[[],
             else:
                 ui.notify('Zapisano dane wniosku.', type='positive')
                 po_zmianie()
-        dialog.delete()
 
     async def kwerenda() -> None:
         with ui.dialog() as dialog, ui.card().classes('w-[30rem]'):
@@ -738,6 +812,7 @@ def _menu_sprawy(w: Wniosek, stan: dict, katalog: Path, po_zmianie: Callable[[],
                 ui.button('Anuluj', on_click=lambda: dialog.submit(False)).props('flat')
                 ui.button('Zapisz', icon='save', on_click=lambda: dialog.submit(True))
         zapisz = await dialog
+        dialog.delete()  # przed odświeżeniem nagłówka – razem z nim znika menu, w którym powstało okno
         if zapisz:
             try:
                 rejestr.ustaw_kwerende(w, wlaczona.value,
@@ -747,7 +822,19 @@ def _menu_sprawy(w: Wniosek, stan: dict, katalog: Path, po_zmianie: Callable[[],
             else:
                 ui.notify(f'Termin odpowiedzi: {w.termin:%d.%m.%Y}.', type='positive')
                 po_zmianie()
-        dialog.delete()
+                if w.kwerenda:
+                    with kotwica:  # menu „⋮” już odświeżone – kolejne okna w stałym miejscu strony
+                        if await potwierdz(f'Termin przedłużony do {w.termin:%d.%m.%Y}. Wnioskodawcę trzeba zawiadomić '
+                                           'o przyczynie i nowym terminie (art. 13 ust. 2). Przygotować '
+                                           'zawiadomienie?', 'Przygotuj'):
+                            await _okno_zawiadomienia(w, stan, po_zmianie)
+
+    async def zawiadomienie() -> None:
+        if not w.kwerenda:
+            ui.notify('Najpierw ustaw kwerendę (nowy termin) – „Kwerenda – przedłuż termin”.', type='warning')
+            return
+        with kotwica:  # zapis zawiadomienia odświeża nagłówek razem z tym menu – okno musi być poza nim
+            await _okno_zawiadomienia(w, stan, po_zmianie)
 
     async def usun() -> None:
         liczba = sum(1 for p in katalog.rglob('*') if p.is_file()) if katalog.exists() else 0
@@ -766,6 +853,7 @@ def _menu_sprawy(w: Wniosek, stan: dict, katalog: Path, po_zmianie: Callable[[],
         with ui.menu():
             ui.menu_item('Edytuj dane wniosku', on_click=edytuj)
             ui.menu_item('Kwerenda – przedłuż termin', on_click=kwerenda)
+            ui.menu_item('Zawiadomienie o przedłużeniu terminu', on_click=zawiadomienie)
             ui.separator()
             ui.menu_item('Usuń wniosek', on_click=usun).classes('text-negative')
 
@@ -789,6 +877,7 @@ def strona_sprawa(id: str) -> None:
         stan['wzor'] = None  # wzór usunięty z Bazy wiedzy
 
     odswiezacze: dict[str, Callable[[], None]] = {}
+    akcje: dict[str, Callable] = {}  # czynności jednego kroku wywoływane z innego (autopilot)
 
     def po_zmianie_sprawy() -> None:
         """Status, termin albo dane wniosku się zmieniły – odświeżamy nagłówek i przebieg sprawy."""
@@ -797,6 +886,7 @@ def strona_sprawa(id: str) -> None:
         if 'Wniosek' in odswiezacze:
             odswiezacze['Wniosek']()
 
+    kotwica = ui.element('div')  # stałe miejsce na okna dialogowe otwierane z odświeżanego menu „⋮”
     with ui.row().classes('w-full items-center justify-between no-wrap'):
         @ui.refreshable
         def naglowek_sprawy() -> None:
@@ -826,7 +916,7 @@ def strona_sprawa(id: str) -> None:
             def akcje_sprawy() -> None:
                 with ui.row().classes('items-center gap-1 no-wrap'):
                     _przycisk_statusu(w, po_zmianie_sprawy)
-                    _menu_sprawy(w, stan, katalog, po_zmianie_sprawy)
+                    _menu_sprawy(w, stan, katalog, po_zmianie_sprawy, kotwica)
 
             akcje_sprawy()
 
@@ -855,9 +945,9 @@ def strona_sprawa(id: str) -> None:
         ('Wniosek', 'description', lambda: _krok_wniosek(w, po_zmianie_sprawy)),
         ('Podobne sprawy', 'manage_search', lambda: _krok_podobne(w, stan)),
         ('Wydziały', 'account_tree', lambda: _krok_wydzialy(w)),
-        ('Odpowiedzi wydziałów', 'upload_file', lambda: _krok_odpowiedzi(w, po_zmianie_sprawy)),
-        ('Projekt odpowiedzi', 'edit_note', lambda: _krok_projekt(w, stan)),
-        ('Anonimizacja', 'visibility_off', lambda: _krok_anonimizacja(stan)),
+        ('Odpowiedzi wydziałów', 'upload_file', lambda: _krok_odpowiedzi(w, stan, akcje, po_zmianie_sprawy)),
+        ('Projekt odpowiedzi', 'edit_note', lambda: _krok_projekt(w, stan, akcje)),
+        ('Anonimizacja', 'visibility_off', lambda: _krok_anonimizacja(w, stan)),
         ('Eksport', 'download', lambda: _krok_eksport(w, stan, po_zmianie_sprawy)),
     ]
     with ui.stepper().props('header-nav alternative-labels flat bordered').classes('w-full') as stepper:

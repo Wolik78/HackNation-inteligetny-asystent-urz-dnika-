@@ -4,11 +4,12 @@ from datetime import date
 
 from nicegui import run, ui
 
-from ... import klasyfikacja, rejestr
+from ... import dziennik, klasyfikacja, rejestr
 from ...ai import AnalizaWniosku, BladAI, WynikDoboru
 from ...ai.wydzialy import dobierz
 from ...pliki import Kategoria, ZapisanyPlik
 from ...uslugi import bielik, magazyn
+from ...wnioskodawca import dane_wnioskodawcy
 from ..komponenty import (WgranePliki, blad_ai, karta_pliku, naglowek_strony, strefa_wgrywania, wskaznik_postepu,
                           zapisz_wgrane)
 
@@ -50,7 +51,12 @@ def strona_nowy_wniosek() -> None:
             return
         aktualne = lambda: stan['plik'] is plik and not przycisk_ai.is_deleted  # noqa: E731 – plik nie zmieniony
 
-        # 1. od razu, bez modelu: wydziały ze słów kluczowych (lista z BIP) i rodzaj sprawy z reguł
+        # 1. od razu, bez modelu: dane wnioskodawcy, wydziały ze słów kluczowych (lista z BIP), rodzaj sprawy z reguł
+        nadawca = dane_wnioskodawcy(tekst)
+        if nadawca.wnioskodawca and not (wnioskodawca.value or '').strip():
+            wnioskodawca.value = nadawca.wnioskodawca
+        if nadawca.kontakt and not (kontakt.value or '').strip():
+            kontakt.value = nadawca.kontakt
         stan['wydzialy'] = await run.io_bound(dobierz, tekst, uzyj_llm=False)
         rodzaj.value, stan['uzasadnienie_rodzaju'] = klasyfikacja.podpowiedz_regulami(tekst)
         podpowiedz.refresh()
@@ -77,6 +83,9 @@ def strona_nowy_wniosek() -> None:
             rodzaj.value, stan['uzasadnienie_rodzaju'] = klasyfikacja.ustal_rodzaj(
                 tekst, analiza.rodzaj, analiza.uzasadnienie_rodzaju)
             podpowiedz.refresh()
+            dziennik.zapisz('Analiza wniosku', sprawa=nr.value, szczegoly=(
+                f'rodzaj: {klasyfikacja.rodzaj(rodzaj.value).nazwa}; kwerenda: '
+                f'{"tak" if analiza.czy_wymaga_kwerendy else "nie"}'))
 
             # 3. Bielik wybiera wydziały spośród najlepszych kandydatów z rankingu
             postep.opis.set_text('Bielik dobiera wydziały z listy BIP…')
@@ -85,6 +94,8 @@ def strona_nowy_wniosek() -> None:
                 return
             stan['wydzialy'] = dobor
             podpowiedz.refresh()
+            dziennik.zapisz('Dobór wydziałów', sprawa=nr.value, kto=dziennik.AI if dobor.zrodlo == 'bielik'
+                            else dziennik.ASYSTENT, szczegoly=', '.join(p.skrot for p in dobor.propozycje) or 'brak')
         finally:
             if not przycisk_ai.is_deleted:
                 przycisk_ai.props(remove='loading')
@@ -201,6 +212,9 @@ def strona_nowy_wniosek() -> None:
             return
         if stan['plik']:
             await run.io_bound(magazyn.przenies_do_sprawy, stan['plik'], wniosek.nr)
+        dziennik.zapisz('Rejestracja wniosku – zatwierdzono dane', kto=dziennik.URZEDNIK, sprawa=wniosek.nr,
+                        szczegoly=f'rodzaj: {klasyfikacja.rodzaj(wniosek.rodzaj).nazwa}; wydziały: '
+                                  f'{", ".join(p.skrot for p in dobor.propozycje) if dobor else "brak"}')
         ui.notify(f'Dodano wniosek {wniosek.nr}.', type='positive')
         ui.navigate.to(f'/sprawa/{wniosek.id}')
 

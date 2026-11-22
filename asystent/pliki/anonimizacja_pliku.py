@@ -16,7 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..anonimizacja import MASKA, zamaskuj
+from ..anonimizacja import MASKA, wykryj_wzorce, zamaskuj
 from . import ocr
 from .eksport import eksportuj
 from .ekstrakcja import normalizuj_znaki, wyciagnij_tekst
@@ -69,6 +69,27 @@ def zanonimizuj_plik(zrodlo: Path, ukryte: Iterable[str], katalog: Path) -> Wyni
                                'formatowania).')
     wynik.pozostale = _kontrola(wynik.sciezka, ciagi)
     return wynik
+
+
+@dataclass
+class WynikWsadowy:
+    nazwa: str
+    wynik: WynikAnonimizacji | None = None
+    wykryte: int = 0
+    blad: str = ''
+
+
+def zanonimizuj_wsadowo(pliki: Iterable[Path], katalog: Path) -> list[WynikWsadowy]:
+    """Tryb wsadowy (np. archiwum przed publikacją): w każdym pliku ukrywane są wszystkie dane wykryte wzorcami
+    (bez AI i bez przeglądu – dlatego wynik zawsze trzeba przejrzeć). Błąd jednego pliku nie przerywa reszty."""
+    wyniki = []
+    for plik in pliki:
+        try:
+            wykryte = wykryj_wzorce(wyciagnij_tekst(plik).tekst)
+            wyniki.append(WynikWsadowy(plik.name, zanonimizuj_plik(plik, wykryte, katalog), len(wykryte)))
+        except Exception as blad:  # uszkodzony plik, brak OCR, błąd zapisu – opis trafia do tabeli wyników
+            wyniki.append(WynikWsadowy(plik.name, blad=str(blad) or type(blad).__name__))
+    return wyniki
 
 
 def _kontrola(sciezka: Path, ciagi: list[str]) -> list[str]:

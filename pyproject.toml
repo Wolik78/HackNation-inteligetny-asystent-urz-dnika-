@@ -1,7 +1,7 @@
 [project]
-name = "asystent-udip"
+name = "cyfrowy-ratusz"
 version = "1.0.0"
-description = "Asystent UDIP – lokalny asystent urzędnika do obsługi wniosków o dostęp do informacji publicznej (HackNation 2026, UM Bydgoszcz)"
+description = "Cyfrowy Ratusz – lokalny asystent urzędnika do obsługi wniosków o dostęp do informacji publicznej (HackNation 2026, UM Bydgoszcz)"
 readme = "README.md"
 requires-python = ">=3.11"
 

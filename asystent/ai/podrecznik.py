@@ -26,15 +26,39 @@ SEKCJE = (
         'niedzielę lub święto – przesuwają się na najbliższy dzień roboczy (ikonka „i” przy terminie). '
         'Możesz filtrować (pilne, w toku, kwerendy, wysłane), szukać po numerze, temacie i wnioskodawcy, wybrać rok '
         'i prowadzącego, a kliknięcie kafelka pokazuje te wnioski. Przełącznik „Miesiąc” pokazuje siatkę kalendarza '
-        'z wnioskami w dniach terminu.'
+        'z wnioskami w dniach terminu. Ikona pobierania obok wyboru roku eksportuje rejestr do Excela, a terminy '
+        'spraw w toku – do kalendarza Outlooka (.ics, z przypomnieniem dzień wcześniej, bez danych osobowych).'
     )),
-    Sekcja('Statusy', ('status', 'etap', 'wyslan', 'kwerend', 'przedluz', 'edytuj', 'usun', 'przebieg',
+    Sekcja('Eksport rejestru', ('excel', 'rejestr', 'outlook', 'ics', 'kalendarz outlook', 'xlsx', 'sprawozdan'), (
+        'Rejestr wniosków wyeksportujesz na ekranie Wnioski: ikona pobierania obok wyboru roku → „Rejestr do Excela” '
+        '(numer, temat, wnioskodawca, daty, status, rodzaj sprawy, terminowość, wydziały) albo „Terminy do kalendarza '
+        'Outlook” – plik .ics z terminami spraw w toku i przypomnieniem dzień wcześniej, bez danych osobowych.'
+    )),
+    Sekcja('Na dziś', ('na dzis', 'pulpit', 'statystyk', 'podsumowan', 'terminowos', 'sredni czas', 'w terminie'), (
+        'Ekran „Na dziś” to pulpit: ile spraw jest w toku, co ma termin dziś lub jutro, co jest po terminie, '
+        'na które sprawy czekamy od wydziałów, jaki odsetek odpowiedzi wysłano w terminie i średni czas odpowiedzi. '
+        'Kliknięcie sprawy na liście ją otwiera. Wykres pokazuje wpływ wniosków w ostatnich 12 miesiącach.'
+    )),
+    Sekcja('Dziennik AI', ('dziennik', 'audyt', 'rozliczaln', 'kto zatwierdzil', 'historia ai', 'log'), (
+        'Dziennik AI (menu po lewej) pokazuje, co zaproponował asystent i co zatwierdził urzędnik – kiedy i w której '
+        'sprawie: analiza wniosku, dobór wydziałów, projekt pisma, kontrola jakości, propozycje danych osobowych, '
+        'eksport pisma, anonimizacja pliku, czynności czatu. Zapisywane są tylko metadane – bez treści dokumentów '
+        'i bez danych osobowych. Można filtrować po numerze sprawy.'
+    )),
+    Sekcja('Autopilot', ('autopilot', 'automatycz', 'samo', 'sam napisze'), (
+        'Autopilot: gdy wgrasz odpowiedź wydziału, a projekt pisma jeszcze nie powstał, Bielik od razu pisze projekt, '
+        'aplikacja robi kontrolę jakości i zaznacza dane osobowe do sprawdzenia w kroku „Anonimizacja”. Niczego nie '
+        'ukrywa ani nie wysyła sam – wszystko zatwierdzasz Ty. Wyłączenie: zmienna UDIP_AUTOPILOT=0.'
+    )),
+    Sekcja('Statusy', ('status', 'etap', 'wyslan', 'kwerend', 'przedluz', 'zawiadom', 'edytuj', 'usun', 'przebieg',
                        'histori'), (
         'Status sprawy widać na kolorowym przycisku w nagłówku sprawy – kliknij, żeby go zmienić. Zmienia się też '
         'sam: po wgraniu odpowiedzi wydziału na „Zapytania wysłane do wydziałów”, po zapisaniu pisma na „Odpowiedź '
         'przygotowana”, a „Oznacz jako wysłane” w kroku Eksport zamyka sprawę z datą odpowiedzi. Menu „⋮” obok '
         'statusu pozwala edytować dane wniosku, ustawić kwerendę (nowy termin, najwyżej 2 miesiące od złożenia) '
-        'albo usunąć wniosek. Każda zmiana trafia do „Przebiegu sprawy” w kroku Wniosek.'
+        'albo usunąć wniosek. Po ustawieniu kwerendy asystent od razu proponuje zawiadomienie wnioskodawcy '
+        'o przedłużeniu terminu (art. 13 ust. 2) – do poprawienia i zapisania jako .docx w sprawie; jest też '
+        'w menu „⋮”. Każda zmiana trafia do „Przebiegu sprawy” w kroku Wniosek.'
     )),
     Sekcja('Nowy wniosek', ('nowy wniosek', 'nowego wniosku', 'dodac wniosek', 'dodaj wniosek', 'wgrac wniosek',
                             'ocr', 'skan', 'zdjec',
@@ -92,7 +116,8 @@ SEKCJE = (
         'albo zdjęcie. Dane osobowe są zaznaczane od razu – także bez Bielika (imiona i nazwiska w odmianie, adresy, '
         'kody pocztowe, PESEL, telefony, e-maile, NIP, daty urodzenia). Zatwierdź, co ukryć, i kliknij „Utwórz '
         'zanonimizowany plik” – powstanie plik w tym samym formacie z czarnymi polami; dane są z niego usuwane, a nie '
-        'tylko zakrywane, i aplikacja sprawdza to, odczytując plik ponownie.'
+        'tylko zakrywane, i aplikacja sprawdza to, odczytując plik ponownie. Sekcja „Wiele plików naraz” anonimizuje '
+        'cały folder (wszystkie dane wykryte wzorcami, bez przeglądu) i pozwala zapisać wynik jako ZIP.'
     )),
     Sekcja('Baza wiedzy', ('baza wiedzy', 'bazie wiedzy', 'baze wiedzy', 'ustaw', 'zarzadzen', 'dokument',
                            'uczy', 'wiedz'), (
@@ -130,8 +155,8 @@ SEKCJE = (
         'w folderze danych (patrz Ustawienia).'
     )),
     # Ogólny opis – na końcu, żeby przy remisie wygrywała konkretna sekcja („jak działa anonimizacja w aplikacji”).
-    Sekcja('Aplikacja', ('aplikacj', 'program', 'narzedz', 'system', 'asystent udip'), (
-        'Asystent UDIP pomaga obsługiwać wnioski o dostęp do informacji publicznej w Urzędzie Miasta Bydgoszczy. '
+    Sekcja('Aplikacja', ('aplikacj', 'program', 'narzedz', 'system', 'cyfrowy ratusz', 'asystent udip'), (
+        'Cyfrowy Ratusz pomaga obsługiwać wnioski o dostęp do informacji publicznej w Urzędzie Miasta Bydgoszczy. '
         'Prowadzi kalendarz wniosków z terminami (ekran Wnioski), odczytuje wgrane pliki PDF i Word, z pomocą '
         'lokalnego modelu Bielik proponuje wydziały i pisze projekt odpowiedzi, wskazuje dane osobowe '
         'do anonimizacji i zapisuje gotowe pismo do Worda. Ma też Bazę wiedzy (ustawy, zarządzenia, archiwalne '

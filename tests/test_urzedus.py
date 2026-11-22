@@ -312,3 +312,57 @@ def test_znacznik_poza_tematem_nie_trafia_na_ekran():
 
     with pytest.raises(OdpowiedzPozaTematem):
         uruchom(zbierz_strumien())
+
+
+def test_zawiadomienie_o_przedluzeniu_ma_nowy_termin():
+    urzedus, zapytania = urzedus_z_modelem(['Szanowny Panie, termin udostępnienia informacji przedłużono.'])
+    nowy = date.today() + timedelta(days=45)
+    tekst = uruchom(zbierz_strumien(urzedus.zawiadomienie_o_przedluzeniu(sprawa(termin_kwerendy=nowy))))
+    assert tekst.startswith('Szanowny Panie')
+    tresc = ' '.join(m['content'] for m in zapytania[-1]['messages'])
+    assert f'Nowy termin udostępnienia informacji (przedłużony): {nowy:%d.%m.%Y}' in tresc
+    assert 'art. 13 ust. 2' in tresc
+
+
+async def zbierz_strumien(strumien) -> str:
+    return ''.join([k async for k in strumien])
+
+
+# --- podobne sprawy ---
+
+@pytest.mark.parametrize('wiadomosc', ['Znajdź podobne sprawy', 'czy były już podobne wnioski?',
+                                       'wyszukaj w archiwum sprawy o wycince drzew'])
+def test_rozpoznanie_podobnych_spraw(wiadomosc):
+    assert rozpoznaj_lokalnie(wiadomosc) is Intencja.PODOBNE
+
+
+def test_pytanie_o_ekran_archiwum_to_nadal_pomoc():
+    assert rozpoznaj_lokalnie('Do czego służy archiwum?') is Intencja.POMOC
+
+
+def _szukajka(zapytania: list[str]):
+    from asystent.archiwum import Dokument, Trafienie, WynikWyszukiwania
+
+    async def szukaj(zapytanie: str, limit: int = 5):
+        zapytania.append(zapytanie)
+        dok = Dokument('archiwum:a', 'archiwum', 'W sprawie wycinki drzew', 'UDIP.240.2024', date(2024, 10, 18), 'x')
+        biezacy = Dokument('wniosek:1', 'wniosek', 'Wydatki na promocję', 'UDIP.11.2026', None, 'x')
+        return WynikWyszukiwania([Trafienie(biezacy, 90), Trafienie(dok, 72)], 'slowa', '', 2)
+    return szukaj
+
+
+def test_podobne_sprawy_dla_otwartej_sprawy():
+    zapytania: list[str] = []
+    urzedus = Urzedus(BielikService('http://lm.test/v1', 'bielik'), szukaj_podobnych=_szukajka(zapytania))
+    wynik = uruchom(urzedus.obsluz('Znajdź podobne sprawy', sprawa()))
+    assert wynik.intencja is Intencja.PODOBNE
+    assert zapytania == ['Wnoszę o informację o wydatkach.']          # tekst otwartej sprawy
+    assert '72% – UDIP.240.2024 – W sprawie wycinki drzew (archiwalna odpowiedź, 18.10.2024)' in wynik.tekst
+    assert 'UDIP.11.2026' not in wynik.tekst                            # bez samej siebie
+
+
+def test_podobne_sprawy_z_tematem_w_poleceniu_bez_sprawy():
+    zapytania: list[str] = []
+    urzedus = Urzedus(BielikService('http://lm.test/v1', 'bielik'), szukaj_podobnych=_szukajka(zapytania))
+    uruchom(urzedus.obsluz('Wyszukaj podobne sprawy o wycince drzew w parkach', None))
+    assert zapytania == ['wycince drzew w parkach']

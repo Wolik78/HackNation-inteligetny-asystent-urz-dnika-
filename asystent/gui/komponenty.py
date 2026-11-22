@@ -3,12 +3,13 @@
 import html
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from nicegui import events, run, ui
+from nicegui import app, events, run, ui
 
 from ..konfiguracja import DOZWOLONE_ROZSZERZENIA, MAKS_ROZMIAR_PLIKU
 from ..pliki import BladPliku, ZapisanyPlik
@@ -56,6 +57,25 @@ def wskaznik_postepu(tekst: str) -> ui.row:
         wiersz.opis = ui.label(tekst).classes('text-caption')
     wiersz.set_visibility(False)
     return wiersz
+
+
+async def zapisz_jako(sciezka: Path, opis_typu: str | None = None) -> Path | None:
+    """Kopia gotowego pliku tam, gdzie wskaże urzędnik: w oknie aplikacji – okno „Zapisz jako”,
+    w przeglądarce – pobranie. Zwraca ścieżkę zapisu (w przeglądarce: None)."""
+    okno = app.native.main_window
+    if okno is None:  # tryb przeglądarki
+        ui.download.file(sciezka, sciezka.name)
+        return None
+    import webview  # dostępne tylko w trybie okna
+    opis = opis_typu or f'Plik {sciezka.suffix.upper().lstrip(".")}'
+    wybor = await okno.create_file_dialog(webview.FileDialog.SAVE, save_filename=sciezka.name,
+                                          file_types=(f'{opis} (*{sciezka.suffix})',))
+    if not wybor:
+        return None
+    cel = Path(wybor if isinstance(wybor, str) else wybor[0]).with_suffix(sciezka.suffix)
+    await run.io_bound(shutil.copyfile, sciezka, cel)
+    ui.notify(f'Zapisano: {cel}', type='positive')
+    return cel
 
 
 def otworz_w_systemie(sciezka: Path) -> None:

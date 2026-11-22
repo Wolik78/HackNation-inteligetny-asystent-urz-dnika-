@@ -1,13 +1,18 @@
 """Ustawienia aplikacji: ścieżki, limity i terminy."""
 
 import os
+import sys
 from pathlib import Path
 
-KATALOG_PROJEKTU = Path(__file__).resolve().parent.parent
+# Wersja zbudowana do .exe (PyInstaller): zasoby (wykaz wydziałów, dane demonstracyjne) są w paczce,
+# a dane urzędu – w folderze „dane” obok pliku .exe (nie w folderze tymczasowym paczki).
+ZBUDOWANA = getattr(sys, 'frozen', False)
+KATALOG_PROJEKTU = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent))
+KATALOG_PROGRAMU = Path(sys.executable).resolve().parent if ZBUDOWANA else KATALOG_PROJEKTU
 
 # Wszystkie dane (wgrane pliki, eksporty) trzymamy lokalnie – katalog jest w .gitignore.
 # Można go przenieść zmienną środowiskową, np. na zaszyfrowany dysk urzędu.
-KATALOG_DANYCH = Path(os.environ.get('UDIP_KATALOG_DANYCH', KATALOG_PROJEKTU / 'dane'))
+KATALOG_DANYCH = Path(os.environ.get('UDIP_KATALOG_DANYCH', KATALOG_PROGRAMU / 'dane'))
 
 DOZWOLONE_ROZSZERZENIA = ('.pdf', '.docx', '.doc', '.txt', '.jpg', '.jpeg', '.png')  # zdjęcia – przez OCR
 MAKS_ROZMIAR_PLIKU = 25 * 1024 * 1024  # 25 MB
@@ -22,3 +27,7 @@ LLM_TEMPERATURA = 0.1
 # Model embeddingów do wyszukiwania podobnych spraw (Archiwum). Wbudowany w LM Studio nomic-embed słabo zna polski,
 # dlatego wyszukiwanie opiera się głównie na słowach; lepszy wielojęzyczny model, np. bge-m3, podnosi wagę znaczenia.
 EMBED_MODEL = os.environ.get('UDIP_EMBED_MODEL', 'text-embedding-nomic-embed-text-v1.5')
+
+# Autopilot: po wgraniu odpowiedzi wydziału Bielik sam pisze projekt pisma, a aplikacja robi kontrolę jakości
+# i zaznacza dane osobowe do sprawdzenia. Wyłączenie: UDIP_AUTOPILOT=0.
+AUTOPILOT = os.environ.get('UDIP_AUTOPILOT', '1') != '0'

@@ -1,5 +1,5 @@
 @echo off
-rem Uruchamia Asystenta UDIP. Tworzy srodowisko .venv i doinstalowuje biblioteki, gdy zmieni sie requirements.txt.
+rem Uruchamia Cyfrowy Ratusz. Tworzy srodowisko .venv i doinstalowuje biblioteki, gdy zmieni sie requirements.txt.
 rem Uzycie: dwuklik albo "uruchom.bat --web" (wersja w przegladarce).
 cd /d "%~dp0"
 

@@ -3,12 +3,14 @@
 import calendar
 from datetime import date, timedelta
 
-from nicegui import ui
+from nicegui import run, ui
 
 from ... import rejestr
+from ...eksport_rejestru import do_excela, do_kalendarza
+from ...konfiguracja import KATALOG_DANYCH
 from ...rejestr import Wniosek
 from ...terminy import NAZWY_DNI_KROTKIE, NAZWY_MIESIECY, jest_dniem_wolnym, powod_wolnego
-from ..komponenty import naglowek_strony, odmiana
+from ..komponenty import naglowek_strony, odmiana, zapisz_jako
 
 KOLOR_STATUSU = {
     'brak': 'grey-6',
@@ -138,7 +140,23 @@ def strona_wnioski() -> None:
             widok = ui.toggle({'tabela': 'Tabela', 'miesiac': 'Miesiąc'}, value='tabela')
             ui.select(rejestr.lata(), value=stan['rok'], label='Rok',
                       on_change=lambda e: (stan.update(rok=e.value), odswiez())).classes('w-28')
+            with ui.button(icon='file_download').props('flat round').tooltip('Eksport rejestru'):
+                with ui.menu():
+                    ui.menu_item('Rejestr do Excela (.xlsx)', on_click=lambda: eksportuj('xlsx'))
+                    ui.menu_item('Terminy do kalendarza Outlook (.ics)', on_click=lambda: eksportuj('ics'))
             ui.button('Nowy wniosek', icon='add', on_click=lambda: ui.navigate.to('/nowy'))
+
+    async def eksportuj(format: str) -> None:
+        wnioski = wnioski_roku()
+        katalog = KATALOG_DANYCH / 'eksport'
+        if format == 'xlsx':
+            plik = await run.io_bound(do_excela, wnioski, katalog / f'rejestr_wnioskow_{stan["rok"]}.xlsx')
+            await zapisz_jako(plik, 'Skoroszyt Excel')
+        else:
+            plik = await run.io_bound(do_kalendarza, wnioski, katalog / f'terminy_wnioskow_{stan["rok"]}.ics')
+            await zapisz_jako(plik, 'Kalendarz iCalendar')
+            ui.notify('Otwórz plik .ics w Outlooku – terminy spraw w toku pojawią się z przypomnieniem '
+                      'dzień wcześniej.', type='info')
 
     # --- kafelki ---
     @ui.refreshable

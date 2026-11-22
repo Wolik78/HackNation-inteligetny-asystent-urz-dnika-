@@ -4,8 +4,9 @@ from contextlib import aclosing
 
 from nicegui import run, ui
 
-from .. import rejestr
+from .. import dziennik, rejestr
 from ..ai import (BladAI, DaneSprawy, Intencja, ODMOWA, OdpowiedzPozaTematem, POWITANIE, Wynik, usun_markdown)
+from ..ai.urzedus import OPISY_INTENCJI
 from ..pliki import Kategoria, eksportuj
 from ..uslugi import magazyn, urzedus
 from .kontekst import KontekstOkna, biezacy
@@ -13,6 +14,7 @@ from .kontekst import KontekstOkna, biezacy
 SZYBKIE_AKCJE_SPRAWY = [
     ('Streść wniosek', 'summarize', Intencja.STRESZCZENIE),
     ('Zaproponuj wydziały', 'account_tree', Intencja.WYDZIALY),
+    ('Znajdź podobne sprawy', 'manage_search', Intencja.PODOBNE),
     ('Napisz projekt', 'edit_note', Intencja.PROJEKT),
     ('Sprawdź pismo', 'fact_check', Intencja.KONTROLA),
     ('Znajdź dane osobowe', 'visibility_off', Intencja.DANE_OSOBOWE),
@@ -31,20 +33,23 @@ NAZWY_PISM = {
 
 
 def _dane_sprawy(kontekst: KontekstOkna) -> DaneSprawy | None:
-    w = kontekst.wniosek
-    if w is None:
-        return None
+    return dane_sprawy(kontekst.wniosek, kontekst.stan_sprawy) if kontekst.wniosek is not None else None
+
+
+def dane_sprawy(w: rejestr.Wniosek, stan: dict | None = None) -> DaneSprawy:
+    """Wszystko, co asystent wie o sprawie: dane, terminy, dokumenty i stan pracy (projekt, ukryte dane)."""
     wniosek = magazyn.lista(Kategoria.WNIOSEK, sprawa=w.nr)
     odpowiedzi = magazyn.lista(Kategoria.ODPOWIEDZ_WYDZIALU, sprawa=w.nr)
-    stan = kontekst.stan_sprawy or {}
+    stan = stan or {}
     projekt = stan.get('projekt', '')
     return DaneSprawy(
-        nr=w.nr, temat=w.temat, data_wplywu=w.data_wplywu, termin=w.termin,
+        nr=w.nr, temat=w.temat, data_wplywu=w.data_wplywu, termin=w.termin_podstawowy,
         tekst_wniosku=wniosek[0].tekst() if wniosek else '',
         odpowiedzi_wydzialow='\n\n'.join(f'[{p.opis or p.nazwa_oryginalna}]\n{p.tekst()}' for p in odpowiedzi),
         projekt='' if projekt == stan.get('szablon') else projekt,
         sugerowane_wydzialy=list(w.sugerowane_wydzialy),
         ukryte=set(stan.get('ukryte', ())),
+        termin_kwerendy=w.termin if w.kwerenda else None,
     )
 
 
@@ -129,6 +134,9 @@ def panel_czatu(zamknij) -> None:
         sprawa_w_chwili_pytania = kontekst.wniosek
         try:
             wynik = await urzedus.obsluz(tresc, _dane_sprawy(kontekst), '\n'.join(historia[-4:]), intencja)
+            if wynik.intencja not in (Intencja.ROZMOWA, Intencja.O_SOBIE):  # bez treści rozmowy – tylko czynność
+                dziennik.zapisz('Czat Urzęduś', sprawa=sprawa_w_chwili_pytania.nr if sprawa_w_chwili_pytania else '',
+                                szczegoly=OPISY_INTENCJI.get(wynik.intencja, wynik.intencja.value))
             if wynik.strumien is not None:
                 async with aclosing(wynik.strumien) as strumien:
                     async for kawalek in strumien:
@@ -213,5 +221,8 @@ def _przyciski_akcji(wynik: Wynik, odpowiedz: str, kontekst: KontekstOkna, wnios
                 for w in wynik.terminy[:5]:
                     ui.button(f'Otwórz {w.nr}', icon='open_in_new',
                               on_click=lambda id=w.id: ui.navigate.to(f'/sprawa/{id}')).props(styl)
+            case Intencja.PODOBNE:
+                ui.button('Otwórz Archiwum', icon='inventory_2',
+                          on_click=lambda: ui.navigate.to('/archiwum')).props(styl)
         if odpowiedz and wynik.intencja not in (Intencja.POZA_TEMATEM, Intencja.TERMINY):
             ui.button('Kopiuj', icon='content_copy', on_click=kopiuj).props(styl)

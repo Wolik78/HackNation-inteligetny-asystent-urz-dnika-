@@ -95,3 +95,15 @@ def test_plik_testowy_z_danymi_osobowymi(tmp_path, plik):
     wynik = zanonimizuj_plik(plik, wykryte, tmp_path / 'wynik')
     assert wynik.bezpieczny, (wynik.nieznalezione, wynik.pozostale)
     assert 'dodatek mieszkaniowy' in wyciagnij_tekst(wynik.sciezka).tekst
+
+
+def test_tryb_wsadowy(tmp_path):
+    from asystent.pliki.anonimizacja_pliku import zanonimizuj_wsadowo
+    (tmp_path / 'wniosek.txt').write_text('Jan Kowalski, tel. 601 234 567, jan@example.com', 'utf-8')
+    (tmp_path / 'zepsuty.pdf').write_bytes(b'%PDF-1.7 to nie jest pdf')
+    wyniki = zanonimizuj_wsadowo([tmp_path / 'wniosek.txt', tmp_path / 'zepsuty.pdf'], tmp_path / 'wynik')
+
+    dobry, zepsuty = wyniki
+    assert dobry.wykryte == 3 and dobry.wynik.bezpieczny
+    assert 'Kowalski' not in dobry.wynik.sciezka.read_text('utf-8')
+    assert zepsuty.wynik is None and zepsuty.blad          # błąd jednego pliku nie przerywa reszty

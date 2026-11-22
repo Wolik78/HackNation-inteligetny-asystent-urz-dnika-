@@ -7,17 +7,19 @@ from nicegui import app, ui
 from ..uslugi import bielik
 from .czat import panel_czatu
 from .kontekst import biezacy
-from .strony import (strona_anonimizacja, strona_archiwum, strona_baza_wiedzy, strona_nowy_wniosek, strona_sprawa,
-                     strona_ustawienia, strona_wnioski)
+from .strony import (strona_anonimizacja, strona_archiwum, strona_baza_wiedzy, strona_dziennik_ai,
+                     strona_nowy_wniosek, strona_pulpit, strona_sprawa, strona_ustawienia, strona_wnioski)
 
-TYTUL = 'Asystent UDIP – UM Bydgoszcz'
+TYTUL = 'Cyfrowy Ratusz – UM Bydgoszcz'
 
 MENU = [
     ('Wnioski', 'event_note', '/'),
+    ('Na dziś', 'dashboard', '/pulpit'),
     ('Nowy wniosek', 'note_add', '/nowy'),
     ('Archiwum', 'inventory_2', '/archiwum'),
     ('Anonimizacja pliku', 'visibility_off', '/anonimizacja'),
     ('Baza wiedzy', 'menu_book', '/baza'),
+    ('Dziennik AI', 'fact_check', '/dziennik'),
     ('Ustawienia', 'settings', '/ustawienia'),
 ]
 
@@ -67,7 +69,7 @@ def root() -> None:
         with ui.row().classes('items-center'):
             ui.icon('gavel', size='md')
             with ui.column().classes('gap-0'):
-                ui.label('Asystent UDIP').classes('text-h6')
+                ui.label('Cyfrowy Ratusz').classes('text-h6')
                 ui.label('Urząd Miasta Bydgoszczy').classes('text-caption')
         with ui.row().classes('items-center gap-3'):
             ui.button('Urzęduś', icon='smart_toy', on_click=lambda: panel_urzedusia.toggle()) \
@@ -90,11 +92,13 @@ def root() -> None:
     with ui.column().classes('w-full q-pa-md'):
         ui.sub_pages({
             '/': _bez_sprawy(strona_wnioski),
+            '/pulpit': _bez_sprawy(strona_pulpit),
             '/nowy': _bez_sprawy(strona_nowy_wniosek),
             '/sprawa/{id}': strona_sprawa,  # sama ustawia kontekst sprawy dla Urzędusia
             '/archiwum': _bez_sprawy(strona_archiwum),
             '/anonimizacja': _bez_sprawy(strona_anonimizacja),
             '/baza': _bez_sprawy(strona_baza_wiedzy),
+            '/dziennik': _bez_sprawy(strona_dziennik_ai),
             '/ustawienia': _bez_sprawy(strona_ustawienia),
         })
 
